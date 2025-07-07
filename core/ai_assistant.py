@@ -11,6 +11,7 @@ import json
 import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+from .local_llm import LocalLLMManager, LocalLLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,26 @@ class SpecialKidsAI:
     """AI Assistant specialized for autistic children communication."""
     
     def __init__(self):
-        self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = "gpt-4"
-        self.max_tokens = 150
-        self.temperature = 0.7
+        # Initialize local LLM manager
+        self.local_llm = LocalLLMManager()
+        self.use_local_mode = os.getenv("LOCAL_MODE", "False").lower() == "true"
+        
+        # Initialize OpenAI client (for fallback or primary use)
+        self.client = None
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        
+        if openai_api_key and openai_api_key != "your_openai_api_key_here":
+            try:
+                self.client = openai.OpenAI(api_key=openai_api_key)
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI client: {e}")
+        
+        if not self.use_local_mode and not self.client:
+            logger.warning("Neither local LLM nor OpenAI is available. Some features may not work.")
+        
+        self.model = os.getenv("MODEL_NAME", "gpt-4")
+        self.max_tokens = int(os.getenv("MAX_TOKENS", "150"))
+        self.temperature = float(os.getenv("TEMPERATURE", "0.7"))
         
         # System prompt optimized for autism spectrum communication
         self.system_prompt = """
@@ -129,19 +146,35 @@ class SpecialKidsAI:
         child_id: int,
         system_prompt: str
     ) -> Dict[str, Any]:
-        """Process text-based communication."""
+        """Process text-based communication using local or cloud LLM."""
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message}
-                ],
-                max_tokens=self.max_tokens,
-                temperature=self.temperature
-            )
+            ai_text = ""
             
-            ai_text = response.choices[0].message.content
+            # Try local LLM first if enabled
+            if self.use_local_mode:
+                local_response = await self.local_llm.generate_response(
+                    prompt=message,
+                    system_prompt=system_prompt,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature
+                )
+                
+                if local_response.success:
+                    ai_text = local_response.text
+                    logger.info(f"Used local LLM: {local_response.model} (processing time: {local_response.processing_time:.2f}s)")
+                else:
+                    logger.warning(f"Local LLM failed: {local_response.error}")
+                    # Fall back to OpenAI if available and enabled
+                    if self.client and os.getenv("FALLBACK_TO_OPENAI", "True").lower() == "true":
+                        ai_text = await self._use_openai(message, system_prompt)
+                    else:
+                        return self._get_fallback_response("Local LLM unavailable and no fallback configured")
+            else:
+                # Use OpenAI directly
+                if self.client:
+                    ai_text = await self._use_openai(message, system_prompt)
+                else:
+                    return self._get_fallback_response("No LLM provider available")
             
             # Analyze the response for additional context
             emotion = self._detect_emotion(ai_text)
@@ -154,12 +187,29 @@ class SpecialKidsAI:
                 "emotion": emotion,
                 "confidence": 0.85,
                 "suggested_actions": actions,
-                "communication_type": "text"
+                "communication_type": "text",
+                "llm_source": "local" if self.use_local_mode else "openai"
             }
         
         except Exception as e:
             logger.error(f"Text processing error: {str(e)}")
             return self._get_fallback_response()
+    
+    async def _use_openai(self, message: str, system_prompt: str) -> str:
+        """Use OpenAI API for text generation."""
+        if not self.client:
+            raise Exception("OpenAI client not available")
+        
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": message}
+            ],
+            max_tokens=self.max_tokens,
+            temperature=self.temperature
+        )
+        return response.choices[0].message.content
     
     async def _process_image_message(
         self,
@@ -253,8 +303,11 @@ class SpecialKidsAI:
         
         return actions
     
-    def _get_fallback_response(self) -> Dict[str, Any]:
+    def _get_fallback_response(self, error_msg: Optional[str] = None) -> Dict[str, Any]:
         """Provide a safe fallback response when AI processing fails."""
+        if error_msg:
+            logger.warning(f"Fallback response triggered: {error_msg}")
+        
         return {
             "text": "I'm Rainbow Bridge, and I'm here for you! Let's try our colorful adventure again! 🌈✨",
             "visual_cues": ["rainbow", "friendly_robot", "heart"],
@@ -286,18 +339,53 @@ class SpecialKidsAI:
             Provide simple, clear activity descriptions.
             """
             
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=200,
-                temperature=0.6
-            )
+            response = None
             
-            # Parse and structure the suggestions
-            suggestions_text = response.choices[0].message.content
+            # Try local LLM first if available
+            if self.use_local_mode:
+                local_response = await self.local_llm.generate_response(
+                    prompt=prompt,
+                    system_prompt=self.system_prompt,
+                    max_tokens=200,
+                    temperature=0.6
+                )
+                
+                if local_response.success:
+                    suggestions_text = local_response.text
+                else:
+                    # Fall back to OpenAI if available
+                    if self.client:
+                        response = self.client.chat.completions.create(
+                            model=self.model,
+                            messages=[
+                                {"role": "system", "content": self.system_prompt},
+                                {"role": "user", "content": prompt}
+                            ],
+                            max_tokens=200,
+                            temperature=0.6
+                        )
+                        suggestions_text = response.choices[0].message.content
+                    else:
+                        raise Exception("No LLM provider available")
+            else:
+                # Use OpenAI directly
+                if self.client:
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": self.system_prompt},
+                            {"role": "user", "content": prompt}
+                        ],
+                        max_tokens=200,
+                        temperature=0.6
+                    )
+                    suggestions_text = response.choices[0].message.content
+                else:
+                    raise Exception("OpenAI client not available")
+            
+            # If we used OpenAI, get the text from response
+            if response and not self.use_local_mode:
+                suggestions_text = response.choices[0].message.content
             suggestions = self._parse_routine_suggestions(suggestions_text)
             
             return suggestions
@@ -329,3 +417,87 @@ class SpecialKidsAI:
                 })
         
         return suggestions[:3]  # Return maximum 3 suggestions
+    
+    def get_llm_status(self) -> Dict[str, Any]:
+        """Get status information about available LLM providers."""
+        status = {
+            "local_mode": self.use_local_mode,
+            "openai_available": self.client is not None,
+            "local_providers": self.local_llm.get_provider_status(),
+            "available_providers": self.local_llm.get_available_providers(),
+            "fallback_enabled": os.getenv("FALLBACK_TO_OPENAI", "True").lower() == "true"
+        }
+        return status
+    
+    def switch_to_local_mode(self) -> bool:
+        """Switch to local LLM mode if providers are available."""
+        if self.local_llm.get_available_providers():
+            self.use_local_mode = True
+            logger.info("Switched to local LLM mode")
+            return True
+        else:
+            logger.warning("No local LLM providers available")
+            return False
+    
+    def switch_to_cloud_mode(self) -> bool:
+        """Switch to cloud LLM mode if OpenAI is available."""
+        if self.client:
+            self.use_local_mode = False
+            logger.info("Switched to cloud LLM mode")
+            return True
+        else:
+            logger.warning("OpenAI client not available")
+            return False
+    
+    async def test_llm_connectivity(self) -> Dict[str, Any]:
+        """Test connectivity to all available LLM providers."""
+        test_results = {
+            "local_providers": {},
+            "openai": {"available": False, "error": None}
+        }
+        
+        # Test local providers
+        test_prompt = "Hello, please respond with a simple greeting."
+        test_system = "You are a friendly assistant. Keep responses short."
+        
+        for provider_name in self.local_llm.providers:
+            provider = self.local_llm.providers[provider_name]
+            try:
+                if provider.is_available():
+                    response = await provider.generate(test_prompt, test_system, 50, 0.7)
+                    test_results["local_providers"][provider_name] = {
+                        "available": response.success,
+                        "response_time": response.processing_time,
+                        "error": response.error
+                    }
+                else:
+                    test_results["local_providers"][provider_name] = {
+                        "available": False,
+                        "error": "Provider not available"
+                    }
+            except Exception as e:
+                test_results["local_providers"][provider_name] = {
+                    "available": False,
+                    "error": str(e)
+                }
+        
+        # Test OpenAI
+        if self.client:
+            try:
+                response = self.client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": test_prompt}],
+                    max_tokens=20
+                )
+                test_results["openai"] = {
+                    "available": True,
+                    "response": response.choices[0].message.content[:50] + "...",
+                    "error": None
+                }
+            except Exception as e:
+                test_results["openai"] = {
+                    "available": False,
+                    "error": str(e)
+                }
+        
+        return test_results

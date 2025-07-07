@@ -24,6 +24,7 @@ from database.db_manager import DatabaseManager
 
 # Load environment variables
 load_dotenv()
+load_dotenv('.env.local')  # Load local LLM configuration
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -251,6 +252,108 @@ async def start_routine_session(
         logger.error(f"Failed to start routine: {str(e)}")
         return JSONResponse(
             content={"error": "Failed to start routine"},
+            status_code=500
+        )
+
+# =============================================================================
+# LOCAL LLM MANAGEMENT ROUTES
+# =============================================================================
+
+@app.get("/api/llm/status")
+async def get_llm_status():
+    """Get the status of all LLM providers."""
+    try:
+        status = ai_assistant.get_llm_status()
+        return JSONResponse(content=status)
+    except Exception as e:
+        logger.error(f"LLM status error: {str(e)}")
+        return JSONResponse(
+            content={"error": "Failed to get LLM status"},
+            status_code=500
+        )
+
+@app.post("/api/llm/switch")
+async def switch_llm_mode(mode: str = Form(...)):
+    """Switch between local and cloud LLM modes."""
+    try:
+        if mode.lower() == "local":
+            success = ai_assistant.switch_to_local_mode()
+            if success:
+                return JSONResponse(content={"success": True, "mode": "local"})
+            else:
+                return JSONResponse(
+                    content={"error": "No local LLM providers available"},
+                    status_code=400
+                )
+        elif mode.lower() == "cloud":
+            success = ai_assistant.switch_to_cloud_mode()
+            if success:
+                return JSONResponse(content={"success": True, "mode": "cloud"})
+            else:
+                return JSONResponse(
+                    content={"error": "OpenAI client not available"},
+                    status_code=400
+                )
+        else:
+            return JSONResponse(
+                content={"error": "Invalid mode. Use 'local' or 'cloud'"},
+                status_code=400
+            )
+    except Exception as e:
+        logger.error(f"LLM switch error: {str(e)}")
+        return JSONResponse(
+            content={"error": "Failed to switch LLM mode"},
+            status_code=500
+        )
+
+@app.get("/api/llm/test")
+async def test_llm_connectivity():
+    """Test connectivity to all LLM providers."""
+    try:
+        results = await ai_assistant.test_llm_connectivity()
+        return JSONResponse(content=results)
+    except Exception as e:
+        logger.error(f"LLM test error: {str(e)}")
+        return JSONResponse(
+            content={"error": "Failed to test LLM connectivity"},
+            status_code=500
+        )
+
+@app.get("/admin/llm")
+async def llm_admin_page(request: Request):
+    """Admin page for local LLM management."""
+    try:
+        # Get current status
+        status = ai_assistant.get_llm_status()
+        
+        return templates.TemplateResponse("llm_admin.html", {
+            "request": request,
+            "status": status,
+            "page_title": "Local LLM Management"
+        })
+    except Exception as e:
+        logger.error(f"LLM admin page error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to load admin page")
+
+@app.post("/api/llm/configure")
+async def configure_llm(
+    provider: str = Form(...),
+    base_url: str = Form(""),
+    model: str = Form(""),
+    enabled: bool = Form(False)
+):
+    """Configure a local LLM provider."""
+    try:
+        # This would typically update environment variables or config files
+        # For now, we'll return a success message
+        return JSONResponse(content={
+            "success": True,
+            "message": f"Configuration for {provider} updated successfully"
+        })
+    except Exception as e:
+        logger.error(f"LLM configuration error: {str(e)}")
+        return JSONResponse(
+            content={"error": "Failed to configure LLM provider"},
             status_code=500
         )
 

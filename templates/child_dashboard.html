@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ child.name }}'s Rainbow Bridge - Communication Dashboard</title>
+    <style>
+        /* Sensory-friendly design with rainbow theme */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 20%, #fecfef 40%, #a8edea 60%, #fed6e3 80%, #d299c2 100%);
+            min-height: 100vh;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #4a90e2;
+            font-size: 2rem;
+        }
+
+        .back-btn {
+            background: #50c878;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: #45b069;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .main-panel {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel-header {
+            background: #4a90e2;
+            color: white;
+            padding: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .panel-content {
+            padding: 20px;
+        }
+
+        .chat-container {
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+
+        .message.user {
+            background: #4a90e2;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message.ai {
+            background: #50c878;
+            color: white;
+        }
+
+        .visual-cues {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .visual-cue {
+            background: white;
+            color: #4a90e2;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            border: 2px solid #4a90e2;
+        }
+
+        .chat-input-area {
+            padding: 20px;
+            background: white;
+            border-top: 2px solid #e9ecef;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+
+        .send-btn {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s ease;
+        }
+
+        .send-btn:hover {
+            background: #357abd;
+        }
+
+        .visual-cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .visual-card {
+            background: #f8f9fa;
+            border: 3px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .visual-card:hover {
+            border-color: #4a90e2;
+            background: #e3f2fd;
+            transform: translateY(-2px);
+        }
+
+        .visual-card.selected {
+            border-color: #50c878;
+            background: #e8f5e8;
+        }
+
+        .visual-card .icon {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        .visual-card .label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .card-header {
+            background: #50c878;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+
+        .card-content {
+            padding: 20px;
+        }
+
+        .routine-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #4a90e2;
+        }
+
+        .routine-item h4 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .routine-item p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .progress-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .progress-item:last-child {
+            border-bottom: none;
+        }
+
+        .progress-bar {
+            width: 100px;
+            height: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #50c878;
+            transition: width 0.3s ease;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 20px;
+            background: #4a90e2;
+            color: white;
+            text-decoration: none;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s ease;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            background: #357abd;
+        }
+
+        .btn-success {
+            background: #50c878;
+        }
+
+        .btn-success:hover {
+            background: #45b069;
+        }
+
+        .communication-mode {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .mode-btn {
+            padding: 8px 15px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .mode-btn.active {
+            border-color: #4a90e2;
+            background: #4a90e2;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            
+            .visual-cards-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>� {{ child.name }}'s Rainbow Bridge</h1>
+            <a href="/" class="back-btn">← Back to Home</a>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="main-panel">
+                <div class="panel-header">
+                    🌈 Chat with Rainbow Bridge
+                </div>
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message ai">
+                            <div>Hi {{ child.name }}! 🌈 I'm Rainbow Bridge, your colorful companion! How are you feeling today?</div>
+                            <div class="visual-cues">
+                                <span class="visual-cue">😊</span>
+                                <span class="visual-cue">🌈</span>
+                                <span class="visual-cue">❤️</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <div class="communication-mode">
+                            <button class="mode-btn active" onclick="setCommunicationMode('text')">Text</button>
+                            <button class="mode-btn" onclick="setCommunicationMode('visual')">Visual</button>
+                            <button class="mode-btn" onclick="setCommunicationMode('audio')">Audio</button>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" class="chat-input" id="messageInput" placeholder="Type your message here...">
+                            <button class="send-btn" onclick="sendMessage()">Send</button>
+                        </div>
+                        <div id="visualCardsContainer" class="visual-cards-container" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="side-panel">
+                <div class="card">
+                    <div class="card-header">
+                        📅 Today's Routines
+                    </div>
+                    <div class="card-content">
+                        <div id="routinesList">
+                            {% for routine in routines %}
+                            <div class="routine-item">
+                                <h4>{{ routine.name }}</h4>
+                                <p>⏰ {{ routine.schedule_time }}</p>
+                                <button class="btn btn-success" onclick="startRoutine({{ routine.id }})">Start</button>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <button class="btn" onclick="openCreateRoutineModal()">+ Create New Routine</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        📊 Progress Overview
+                    </div>
+                    <div class="card-content">
+                        <div class="progress-item">
+                            <span>Communication</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: {{ progress.communication_score }}%"></div>
+                            </div>
+                        </div>
+                        <div class="progress-item">
+                            <span>Routine Adherence</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: {{ progress.routine_adherence }}%"></div>
+                            </div>
+                        </div>
+                        <div class="progress-item">
+                            <span>Learning Engagement</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: {{ progress.learning_engagement }}%"></div>
+                            </div>
+                        </div>
+                        <button class="btn" onclick="viewDetailedProgress()">View Detailed Report</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentCommunicationMode = 'text';
+        let selectedVisualCards = [];
+        const childId = {{ child.id }};
+
+        // Load visual cards when page loads
+        window.addEventListener('load', async function() {
+            await loadVisualCards();
+        });
+
+        function setCommunicationMode(mode) {
+            currentCommunicationMode = mode;
+            
+            // Update button states
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Show/hide visual cards
+            const visualContainer = document.getElementById('visualCardsContainer');
+            const messageInput = document.getElementById('messageInput');
+            
+            if (mode === 'visual') {
+                visualContainer.style.display = 'grid';
+                messageInput.placeholder = 'Select visual cards or type a message...';
+            } else {
+                visualContainer.style.display = 'none';
+                messageInput.placeholder = mode === 'audio' ? 'Click to record audio or type...' : 'Type your message here...';
+            }
+        }
+
+        async function loadVisualCards() {
+            try {
+                const response = await fetch('/api/visual-cards');
+                const cards = await response.json();
+                
+                const container = document.getElementById('visualCardsContainer');
+                container.innerHTML = cards.map(card => `
+                    <div class="visual-card" onclick="toggleVisualCard('${card.id}', this)">
+                        <div class="icon">${getCardIcon(card.category, card.name)}</div>
+                        <div class="label">${card.name}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading visual cards:', error);
+            }
+        }
+
+        function getCardIcon(category, name) {
+            const icons = {
+                'emotions': {
+                    'Happy': '😊', 'Sad': '😢', 'Angry': '😠', 'Calm': '😌', 'Excited': '🤩', 'Tired': '😴'
+                },
+                'needs': {
+                    'Eat': '🍽️', 'Drink': '🥤', 'Bathroom': '🚻', 'Sleep': '🛏️', 'Help': '🆘', 'Break': '⏸️'
+                },
+                'activities': {
+                    'Play': '🎮', 'Read': '📚', 'Music': '🎵', 'Draw': '🎨', 'Outside': '🌳', 'Quiet Time': '🤫'
+                },
+                'social': {
+                    'Yes': '✅', 'No': '❌', 'Please': '🙏', 'Thank You': '🙏', 'Hello': '👋', 'Goodbye': '👋'
+                }
+            };
+            
+            return icons[category]?.[name] || '⭐';
+        }
+
+        function toggleVisualCard(cardId, element) {
+            const index = selectedVisualCards.indexOf(cardId);
+            
+            if (index > -1) {
+                selectedVisualCards.splice(index, 1);
+                element.classList.remove('selected');
+            } else {
+                selectedVisualCards.push(cardId);
+                element.classList.add('selected');
+            }
+            
+            updateMessageInput();
+        }
+
+        function updateMessageInput() {
+            if (selectedVisualCards.length > 0) {
+                const cardNames = selectedVisualCards.map(id => {
+                    const element = document.querySelector(`[onclick*="${id}"]`);
+                    return element ? element.querySelector('.label').textContent : id;
+                });
+                document.getElementById('messageInput').value = cardNames.join(' + ');
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message && selectedVisualCards.length === 0) return;
+            
+            const finalMessage = message || selectedVisualCards.join(' + ');
+            
+            // Add user message to chat
+            addMessageToChat(finalMessage, 'user');
+            
+            // Clear input and selected cards
+            input.value = '';
+            selectedVisualCards = [];
+            document.querySelectorAll('.visual-card.selected').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            try {
+                const formData = new FormData();
+                formData.append('child_id', childId);
+                formData.append('message', finalMessage);
+                formData.append('communication_type', currentCommunicationMode);
+                
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.text) {
+                    addMessageToChat(result.text, 'ai', result.visual_cues);
+                } else {
+                    addMessageToChat('Sorry, I couldn\'t understand that. Can you try again?', 'ai');
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addMessageToChat('Sorry, there was an error. Please try again.', 'ai');
+            }
+        }
+
+        function addMessageToChat(message, sender, visualCues = []) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            let html = `<div>${message}</div>`;
+            
+            if (visualCues && visualCues.length > 0) {
+                html += '<div class="visual-cues">';
+                visualCues.forEach(cue => {
+                    html += `<span class="visual-cue">${getVisualCueIcon(cue)}</span>`;
+                });
+                html += '</div>';
+            }
+            
+            messageDiv.innerHTML = html;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function getVisualCueIcon(cue) {
+            const icons = {
+                'happy_face': '😊',
+                'thumbs_up': '👍',
+                'star': '⭐',
+                'heart': '❤️',
+                'friendly_robot': '🤖',
+                'comfort_hug': '🤗',
+                'practice_icon': '💪',
+                'listening': '👂',
+                'musical_note': '🎵'
+            };
+            return icons[cue] || cue;
+        }
+
+        // Allow Enter key to send message
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        async function startRoutine(routineId) {
+            try {
+                const formData = new FormData();
+                formData.append('routine_id', routineId);
+                formData.append('child_id', childId);
+                
+                const response = await fetch('/api/routine/start', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Routine started! Let\'s begin with the first activity.');
+                    // Could redirect to a routine session page
+                } else {
+                    alert('Error starting routine: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error starting routine:', error);
+                alert('Error starting routine. Please try again.');
+            }
+        }
+
+        function openCreateRoutineModal() {
+            // This would open a modal for creating new routines
+            alert('Create routine feature coming soon!');
+        }
+
+        function viewDetailedProgress() {
+            // This would open a detailed progress view
+            window.open(`/api/progress/${childId}`, '_blank');
+        }
+    </script>
+</body>
+</html>

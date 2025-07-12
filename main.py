@@ -20,6 +20,7 @@ from core.ai_assistant import SpecialKidsAI
 from core.routine_manager import RoutineManager
 from core.progress_tracker import ProgressTracker
 from core.communication_helper import CommunicationHelper
+from core.routine_mcp_server import create_routine_mcp_server
 from database.db_manager import DatabaseManager
 
 # Load environment variables
@@ -47,13 +48,16 @@ app.add_middleware(
 )
 
 # Mount static files and templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+import pathlib
+BASE_DIR = pathlib.Path(__file__).parent.absolute()
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # Initialize core components
 db_manager = DatabaseManager()
-ai_assistant = SpecialKidsAI()
 routine_manager = RoutineManager(db_manager)
+routine_mcp_server = create_routine_mcp_server(routine_manager, db_manager)
+ai_assistant = SpecialKidsAI(routine_mcp_server)
 progress_tracker = ProgressTracker(db_manager)
 communication_helper = CommunicationHelper()
 

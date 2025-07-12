@@ -13,6 +13,22 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from .local_llm import LocalLLMManager, LocalLLMResponse
 
+# Azure OpenAI imports
+try:
+    from openai import AzureOpenAI
+    AZURE_AVAILABLE = True
+except ImportError:
+    AZURE_AVAILABLE = False
+    AzureOpenAI = None
+
+# MCP Client import
+try:
+    from .routine_mcp_client import RoutineMCPClient, create_routine_mcp_client
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    RoutineMCPClient = None
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -27,23 +43,56 @@ class AIResponse:
 class SpecialKidsAI:
     """AI Assistant specialized for autistic children communication."""
     
-    def __init__(self):
+    def __init__(self, routine_mcp_server=None):
         # Initialize local LLM manager
         self.local_llm = LocalLLMManager()
         self.use_local_mode = os.getenv("LOCAL_MODE", "False").lower() == "true"
         
-        # Initialize OpenAI client (for fallback or primary use)
-        self.client = None
-        openai_api_key = os.getenv("OPENAI_API_KEY")
+        # Initialize MCP client for routine management
+        self.routine_mcp_client = None
+        if routine_mcp_server and MCP_AVAILABLE:
+            self.routine_mcp_client = create_routine_mcp_client(routine_mcp_server)
+            logger.info("MCP client for routines initialized successfully")
         
-        if openai_api_key and openai_api_key != "your_openai_api_key_here":
+        # Initialize AI client (Azure OpenAI or OpenAI)
+        self.client = None
+        self.use_azure = os.getenv("USE_AZURE_OPENAI", "False").lower() == "true"
+        
+        if self.use_azure and AZURE_AVAILABLE:
+            # Initialize Azure OpenAI client
             try:
-                self.client = openai.OpenAI(api_key=openai_api_key)
+                # Use your preferred variable names
+                subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
+                endpoint = os.getenv("ENDPOINT_URL")
+                deployment = os.getenv("DEPLOYMENT_NAME")
+                azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+                
+                if subscription_key and endpoint and deployment:
+                    self.client = AzureOpenAI(
+                        api_key=subscription_key,
+                        azure_endpoint=endpoint,
+                        api_version=azure_api_version
+                    )
+                    self.deployment_name = deployment
+                    logger.info(f"Azure OpenAI client initialized successfully with endpoint: {endpoint}")
+                    logger.info(f"Using deployment: {deployment}")
+                else:
+                    logger.warning(f"Azure OpenAI credentials incomplete - key: {'✓' if subscription_key else '✗'}, endpoint: {'✓' if endpoint else '✗'}, deployment: {'✓' if deployment else '✗'}")
             except Exception as e:
-                logger.warning(f"Failed to initialize OpenAI client: {e}")
+                logger.warning(f"Failed to initialize Azure OpenAI client: {e}")
+        else:
+            # Initialize standard OpenAI client (fallback)
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            
+            if openai_api_key and openai_api_key != "your_openai_api_key_here":
+                try:
+                    self.client = openai.OpenAI(api_key=openai_api_key)
+                    logger.info("Standard OpenAI client initialized successfully")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize OpenAI client: {e}")
         
         if not self.use_local_mode and not self.client:
-            logger.warning("Neither local LLM nor OpenAI is available. Some features may not work.")
+            logger.warning("Neither local LLM nor cloud AI is available. Some features may not work.")
         
         self.model = os.getenv("MODEL_NAME", "gpt-4")
         self.max_tokens = int(os.getenv("MAX_TOKENS", "150"))
@@ -148,6 +197,26 @@ class SpecialKidsAI:
     ) -> Dict[str, Any]:
         """Process text-based communication using local or cloud LLM."""
         try:
+            # First check if this is a routine-related request
+            if self.routine_mcp_client:
+                routine_intent = await self.routine_mcp_client.detect_routine_intent(message, child_id)
+                if routine_intent:
+                    logger.info(f"Detected routine intent: {routine_intent['intent']}")
+                    mcp_result = await self.routine_mcp_client.handle_routine_request(routine_intent)
+                    
+                    if mcp_result.success:
+                        # Return MCP response with routine-specific visual cues
+                        return {
+                            "text": mcp_result.content,
+                            "visual_cues": self._get_routine_visual_cues(routine_intent["intent"]),
+                            "emotion": "encouraging",
+                            "confidence": 0.95,
+                            "suggested_actions": self._get_routine_actions(routine_intent["intent"]),
+                            "communication_type": "text",
+                            "llm_source": "mcp_routine",
+                            "routine_action": routine_intent["intent"]
+                        }
+            
             ai_text = ""
             
             # Try local LLM first if enabled
@@ -188,7 +257,7 @@ class SpecialKidsAI:
                 "confidence": 0.85,
                 "suggested_actions": actions,
                 "communication_type": "text",
-                "llm_source": "local" if self.use_local_mode else "openai"
+                "llm_source": "local" if self.use_local_mode else ("azure_openai" if self.use_azure else "openai")
             }
         
         except Exception as e:
@@ -196,20 +265,56 @@ class SpecialKidsAI:
             return self._get_fallback_response()
     
     async def _use_openai(self, message: str, system_prompt: str) -> str:
-        """Use OpenAI API for text generation."""
+        """Use OpenAI API (Azure or standard) for text generation."""
         if not self.client:
-            raise Exception("OpenAI client not available")
+            raise Exception("AI client not available")
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message}
-            ],
-            max_tokens=self.max_tokens,
-            temperature=self.temperature
-        )
-        return response.choices[0].message.content
+        try:
+            if self.use_azure:
+                # Check if this is a completion model (like gpt-35-turbo-instruct) or chat model
+                is_completion_model = "instruct" in self.deployment_name.lower()
+                
+                if is_completion_model:
+                    # Use completions endpoint for instruct models
+                    # Combine system prompt and user message
+                    combined_prompt = f"{system_prompt}\n\nUser: {message}\nAssistant:"
+                    
+                    response = self.client.completions.create(
+                        model=self.deployment_name,
+                        prompt=combined_prompt,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        stop=["User:", "\n\n"]
+                    )
+                    return response.choices[0].text.strip()
+                else:
+                    # Use chat completions endpoint for chat models
+                    response = self.client.chat.completions.create(
+                        model=self.deployment_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": message}
+                        ],
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature
+                    )
+                    return response.choices[0].message.content
+            else:
+                # Use standard OpenAI chat completions
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message}
+                    ],
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature
+                )
+                return response.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"AI API call failed: {str(e)}")
+            raise Exception(f"Failed to get AI response: {str(e)}")
     
     async def _process_image_message(
         self,
@@ -501,3 +606,27 @@ class SpecialKidsAI:
                 }
         
         return test_results
+    
+    def _get_routine_visual_cues(self, intent: str) -> List[str]:
+        """Get visual cues specific to routine actions."""
+        routine_visual_cues = {
+            "create_routine": ["calendar", "clock", "star", "rainbow"],
+            "get_routines": ["list", "calendar", "activities", "rainbow"],
+            "start_routine": ["play", "start", "arrow_right", "sparkles"],
+            "complete_activity": ["checkmark", "star", "trophy", "celebration"],
+            "get_suggestions": ["lightbulb", "question", "thinking", "rainbow"]
+        }
+        
+        return routine_visual_cues.get(intent, ["rainbow", "friendly_robot"])
+    
+    def _get_routine_actions(self, intent: str) -> List[str]:
+        """Get suggested actions for routine intents."""
+        routine_actions = {
+            "create_routine": ["create_routine", "view_templates", "schedule_time"],
+            "get_routines": ["view_routines", "start_routine", "edit_routine"],
+            "start_routine": ["begin_activity", "view_steps", "get_help"],
+            "complete_activity": ["next_activity", "view_progress", "celebrate"],
+            "get_suggestions": ["create_routine", "try_activity", "explore_more"]
+        }
+        
+        return routine_actions.get(intent, ["continue_chat"])

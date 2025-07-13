@@ -38,6 +38,7 @@ class DatabaseManager:
                         interests TEXT,  -- JSON array
                         special_needs TEXT,  -- JSON array
                         preferences TEXT,  -- JSON object
+                        profile_picture TEXT DEFAULT 'default.svg',  -- Profile picture filename
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -154,6 +155,18 @@ class DatabaseManager:
                 """)
                 
                 await db.commit()
+                
+                # Add profile_picture column if it doesn't exist (migration)
+                try:
+                    await db.execute("""
+                        ALTER TABLE children ADD COLUMN profile_picture TEXT DEFAULT 'default.svg'
+                    """)
+                    await db.commit()
+                    logger.info("Added profile_picture column to children table")
+                except Exception:
+                    # Column already exists, ignore
+                    pass
+                
                 logger.info("Database initialized successfully")
         
         except Exception as e:
@@ -358,6 +371,57 @@ class DatabaseManager:
             logger.error(f"Failed to update routine session {session_id}: {str(e)}")
             return False
     
+    async def get_active_routine_sessions(self, child_id: int) -> List[Dict]:
+        """Get active routine sessions for a child."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("""
+                    SELECT rs.*, r.name as routine_name
+                    FROM routine_sessions rs
+                    JOIN routines r ON rs.routine_id = r.id
+                    WHERE rs.child_id = ? AND rs.completed_at IS NULL
+                    ORDER BY rs.started_at DESC
+                """, (child_id,))
+                
+                rows = await cursor.fetchall()
+                sessions = []
+                
+                for row in rows:
+                    sessions.append({
+                        "id": row[0],
+                        "routine_id": row[1],
+                        "child_id": row[2],
+                        "started_at": row[3],
+                        "completed_at": row[4],
+                        "current_activity": row[5],
+                        "total_activities": row[6],
+                        "status": row[7],
+                        "progress": row[8],
+                        "routine_name": row[9]
+                    })
+                
+                return sessions
+                
+        except Exception as e:
+            logger.error(f"Failed to get active routine sessions for child {child_id}: {str(e)}")
+            return []
+
+    async def get_routine_activities(self, routine_id: int) -> List[Dict]:
+        """Get activities for a specific routine."""
+        try:
+            routine_data = await self.get_routine(routine_id)
+            if routine_data and "activities" in routine_data:
+                return routine_data["activities"]
+            return []
+        except Exception as e:
+            logger.error(f"Failed to get activities for routine {routine_id}: {str(e)}")
+            return []
+
+    async def get_child_routines(self, child_id: int) -> List[Dict]:
+        """Get all routines for a child (alias for get_routines_by_child)."""
+        return await self.get_routines_by_child(child_id)
+
     async def update_routine_activity_status(self, routine_id: int, activity_index: int, completed: bool) -> bool:
         """Update the completion status of an activity in a routine."""
         try:

@@ -2,7 +2,13 @@
 MCP Client Integration for Rainbow Bridge AI Assistant
 
 This module integrates MCP server functionality into the AI assistant,
-allowing chat-based routine management.
+allowing c            # Look for descriptive words before or after "routine"
+            if before_routine and len(before_routine[-1]) > 2:
+                params["routine_name"] = f"{before_routine[-1].title()} Routine"
+            elif after_routine and len(after_routine[0]) > 2:
+                params["routine_name"] = f"{after_routine[0].title()} Routine"
+        
+        return paramsased routine management.
 """
 
 import asyncio
@@ -37,44 +43,111 @@ class RoutineMCPClient:
     async def detect_routine_intent(self, message: str, child_id: int) -> Optional[Dict[str, Any]]:
         """Detect if a message contains routine-related intent."""
         message_lower = message.lower()
+        logger.info(f"DEBUG: Analyzing message for routine intent: '{message}' (child_id: {child_id})")
         
-        # Intent patterns for routine management
+        # Check for active sessions first
+        active_sessions = await self._get_active_sessions(child_id)
+        has_active_sessions = len(active_sessions) > 0
+        logger.info(f"DEBUG: Active sessions found: {len(active_sessions)}")
+        
+        # Enhanced intent patterns for routine management with AI suggestions
         intent_patterns = {
             "create_routine": [
-                "create routine", "new routine", "make routine", "start routine",
-                "add routine", "schedule", "plan activities"
+                "create routine", "new routine", "make routine", 
+                "add routine", "schedule", "plan activities", "want to create",
+                "help me make", "need a routine", "set up routine", "build routine",
+                "create schedule", "make schedule", "plan my day", "organize activities"
             ],
             "get_routines": [
                 "my routines", "show routines", "what routines", "list routines",
-                "see my schedule", "what activities"
+                "see my schedule", "what activities", "show my schedule"
             ],
             "start_routine": [
-                "start", "begin", "do routine", "time for", "ready for"
+                "start routine", "begin routine", "do routine", "time for routine",
+                "ready for routine", "let's start routine", "begin my routine"
             ],
             "complete_activity": [
-                "done", "finished", "completed", "did it", "finished with"
+                "done", "finished", "completed", "did it", "finished with",
+                "I'm done", "just finished", "complete", "mark done",
+                "activity done", "task done", "step done"
             ],
             "get_suggestions": [
                 "what should i do", "activity ideas", "suggest", "what activities",
-                "help me choose", "what's next"
+                "help me choose", "what's next", "what can i do", "suggest activities",
+                "recommend", "ideas for", "activities for", "help me find"
+            ],
+            "smart_schedule": [
+                "plan my morning", "plan my evening", "plan my day", "what should I do today",
+                "help me organize", "create my schedule", "best activities for me",
+                "activities for today", "what's good for", "schedule suggestions",
+                "auto create", "smart routine", "ai suggestions", "best routine"
             ]
         }
         
-        detected_intent = None
-        for intent, patterns in intent_patterns.items():
-            if any(pattern in message_lower for pattern in patterns):
-                detected_intent = intent
-                break
+        # If there are active sessions, prioritize activity completion over routine creation
+        if has_active_sessions:
+            # Look for activity completion patterns first
+            for pattern in intent_patterns["complete_activity"]:
+                if pattern in message_lower:
+                    intent_data = {
+                        "intent": "complete_activity",
+                        "confidence": 0.9,
+                        "child_id": child_id,
+                        "message": message,
+                        "active_sessions": active_sessions
+                    }
+                    intent_data.update(self._extract_activity_name(message))
+                    return intent_data
+            
+            # Check for explicit routine creation even with active sessions
+            for pattern in intent_patterns["create_routine"]:
+                if pattern in message_lower:
+                    logger.info(f"DEBUG: Matched routine creation pattern '{pattern}' even with active sessions")
+                    detected_intent = "create_routine"
+                    break
+            
+            # Check if they're trying to start another routine
+            if not detected_intent and any(pattern in message_lower for pattern in ["start", "begin"]):
+                # This might be starting a new routine or continuing current one
+                detected_intent = "start_routine"
+            elif not detected_intent:
+                # Default to activity completion context when sessions are active and no other intent found
+                detected_intent = "complete_activity"
+                intent_data = {
+                    "intent": detected_intent,
+                    "confidence": 0.7,
+                    "child_id": child_id,
+                    "message": message,
+                    "active_sessions": active_sessions
+                }
+                intent_data.update(self._extract_activity_name(message))
+                return intent_data
+        else:
+            # Normal intent detection when no active sessions
+            detected_intent = None
+        
+        # Continue with normal intent detection if not already detected
+        if not detected_intent:
+            for intent, patterns in intent_patterns.items():
+                for pattern in patterns:
+                    if pattern in message_lower:
+                        detected_intent = intent
+                        logger.info(f"DEBUG: Matched pattern '{pattern}' for intent '{intent}'")
+                        break
+                if detected_intent:
+                    break
         
         if not detected_intent:
+            logger.info(f"DEBUG: No intent patterns matched for message: '{message}'")
             return None
         
         # Extract parameters based on intent
         intent_data = {
             "intent": detected_intent,
-            "confidence": 0.8,  # Simple confidence score
+            "confidence": 0.8,
             "child_id": child_id,
-            "message": message
+            "message": message,
+            "active_sessions": active_sessions if has_active_sessions else []
         }
         
         # Extract specific parameters
@@ -84,6 +157,8 @@ class RoutineMCPClient:
             intent_data.update(self._extract_activity_name(message))
         elif detected_intent == "start_routine":
             intent_data.update(self._extract_routine_name(message))
+        elif detected_intent == "smart_schedule":
+            intent_data.update(self._extract_smart_schedule_params(message))
         
         return intent_data
     
@@ -116,33 +191,94 @@ class RoutineMCPClient:
                 params["schedule_time"] = f"{hour:02d}:00"
         
         # Extract routine name
-        if "called" in message.lower():
+        import re
+        
+        # Look for quoted routine names
+        quote_pattern = r'["\']([^"\']+)["\']'
+        quote_match = re.search(quote_pattern, message)
+        if quote_match:
+            params["routine_name"] = quote_match.group(1)
+        elif "called" in message.lower():
+            # Original "called" extraction
             name_start = message.lower().find("called") + 6
             name_end = message.find(" ", name_start)
             if name_end == -1:
                 name_end = len(message)
             params["routine_name"] = message[name_start:name_end].strip(' "\'')
+        elif "routine" in message.lower():
+            # Try to extract words before or after "routine"
+            routine_idx = message.lower().find("routine")
+            before_routine = message[:routine_idx].strip().split()
+            after_routine = message[routine_idx + 7:].strip().split()
+            
+            # Look for descriptive words before "routine"
+            if before_routine and len(before_routine[-1]) > 2:
+                params["routine_name"] = f"{before_routine[-1].title()} Routine"
+            elif after_routine and len(after_routine[0]) > 2:
+                params["routine_name"] = f"{after_routine[0].title()} Routine"
         
         return params
     
     def _extract_activity_name(self, message: str) -> Dict[str, Any]:
         """Extract activity name from completion message."""
-        # Look for common completion phrases
-        completion_phrases = ["done with", "finished", "completed", "did"]
+        message_lower = message.lower()
         
-        for phrase in completion_phrases:
-            if phrase in message.lower():
-                start_idx = message.lower().find(phrase) + len(phrase)
-                # Extract the activity name after the phrase
-                activity_part = message[start_idx:].strip()
-                if activity_part:
-                    return {"activity_name": activity_part.split()[0]}
+        # Common activity keywords that we prioritize
+        activity_keywords = [
+            "breakfast", "lunch", "dinner", "snack", "eating", "eat",
+            "brush", "teeth", "brushing", "shower", "bath", "bathing", "wash", "washing",
+            "homework", "reading", "read", "study", "studying", 
+            "play", "playing", "exercise", "walk", "walking",
+            "medication", "medicine", "vitamin", "vitamins",
+            "dress", "dressing", "clothes", "cleanup", "clean",
+            "bedtime", "sleep", "nap", "wake", "morning"
+        ]
         
-        # Fallback: try to extract meaningful words
+        # Look for activity keywords first (highest priority)
         words = message.split()
         for word in words:
-            if len(word) > 3 and word.lower() not in ["done", "finished", "completed"]:
-                return {"activity_name": word}
+            word_clean = word.lower().strip('.,!?-')
+            if word_clean in activity_keywords:
+                return {"activity_name": word_clean}
+        
+        # Look for common completion phrases with better extraction
+        completion_patterns = [
+            ("done with", 8),
+            ("finished", 8), 
+            ("completed", 9),
+            ("did", 3),
+            ("done", 4)
+        ]
+        
+        for pattern, pattern_len in completion_patterns:
+            if pattern in message_lower:
+                # Find the phrase position
+                phrase_start = message_lower.find(pattern)
+                phrase_end = phrase_start + pattern_len
+                
+                # Extract everything after the phrase
+                after_phrase = message[phrase_end:].strip()
+                
+                # Clean up the activity name
+                if after_phrase:
+                    # Remove common words and punctuation
+                    activity_name = after_phrase.replace("the", "").replace("my", "").strip()
+                    activity_name = activity_name.split('.')[0].split('!')[0].split('?')[0].split(',')[0]
+                    activity_name = activity_name.strip()
+                    
+                    # Only accept if it looks like a real activity
+                    if activity_name and len(activity_name) > 2:
+                        # Check if it's a meaningful activity word
+                        activity_clean = activity_name.lower()
+                        skip_words = ["sure", "that", "this", "well", "good", "okay", "yes", "now", "just", "really"]
+                        if activity_clean not in skip_words:
+                            return {"activity_name": activity_name}
+        
+        # Look for multi-word activities (like "brush teeth")
+        for i in range(len(words) - 1):
+            two_word = f"{words[i]} {words[i+1]}".lower().strip('.,!?')
+            if any(keyword in two_word for keyword in ["brush teeth", "wash hands", "get dressed", "clean up"]):
+                return {"activity_name": two_word}
         
         return {}
     
@@ -154,7 +290,100 @@ class RoutineMCPClient:
             if word.lower() in ["routine", "schedule"] and i > 0:
                 return {"routine_name": words[i-1]}
         
+        # Also look for "my" followed by words before "routine"
+        if "my" in message.lower():
+            my_index = -1
+            for i, word in enumerate(words):
+                if word.lower() == "my":
+                    my_index = i
+                    break
+            
+            if my_index >= 0 and my_index + 1 < len(words):
+                # Extract everything between "my" and potentially "routine"
+                routine_words = []
+                for j in range(my_index + 1, len(words)):
+                    if words[j].lower() in ["routine", "schedule"]:
+                        break
+                    routine_words.append(words[j])
+                
+                if routine_words:
+                    return {"routine_name": " ".join(routine_words)}
+        
         return {}
+    
+    def _extract_smart_schedule_params(self, message: str) -> Dict[str, Any]:
+        """Extract parameters for smart schedule generation."""
+        import re
+        from datetime import datetime
+        
+        params = {}
+        message_lower = message.lower()
+        
+        # Extract time of day
+        time_of_day = "any"
+        if any(word in message_lower for word in ["morning", "am", "breakfast"]):
+            time_of_day = "morning"
+        elif any(word in message_lower for word in ["afternoon", "lunch", "midday"]):
+            time_of_day = "afternoon"  
+        elif any(word in message_lower for word in ["evening", "dinner", "night", "pm"]):
+            time_of_day = "evening"
+        elif any(word in message_lower for word in ["bedtime", "sleep", "before bed"]):
+            time_of_day = "bedtime"
+        
+        params["time_of_day"] = time_of_day
+        
+        # Extract activity preferences
+        activity_preferences = []
+        if any(word in message_lower for word in ["calm", "quiet", "relax", "peaceful"]):
+            activity_preferences.append("calming")
+        if any(word in message_lower for word in ["active", "movement", "exercise", "play"]):
+            activity_preferences.append("active")
+        if any(word in message_lower for word in ["learning", "educational", "study", "practice"]):
+            activity_preferences.append("educational")
+        if any(word in message_lower for word in ["creative", "art", "draw", "make"]):
+            activity_preferences.append("creative")
+        if any(word in message_lower for word in ["sensory", "texture", "feel", "touch"]):
+            activity_preferences.append("sensory")
+        
+        params["activity_preferences"] = activity_preferences
+        
+        # Extract duration preferences
+        duration = "medium"  # default
+        if any(word in message_lower for word in ["quick", "short", "brief", "few minutes"]):
+            duration = "short"
+        elif any(word in message_lower for word in ["long", "extended", "detailed", "thorough"]):
+            duration = "long"
+        
+        params["duration"] = duration
+        
+        # Extract mood/energy level
+        energy_level = "medium"
+        if any(word in message_lower for word in ["tired", "low energy", "exhausted", "sleepy"]):
+            energy_level = "low"
+        elif any(word in message_lower for word in ["energetic", "excited", "active", "high energy"]):
+            energy_level = "high"
+        
+        params["energy_level"] = energy_level
+        
+        # Extract specific activity mentions
+        mentioned_activities = []
+        activity_keywords = [
+            "breakfast", "lunch", "dinner", "snack", "eating",
+            "brush teeth", "shower", "bath", "wash hands",
+            "homework", "reading", "study", "practice",
+            "play", "games", "toys", "outside",
+            "music", "dance", "sing", "instruments",
+            "art", "draw", "color", "paint", "craft",
+            "exercise", "walk", "stretch", "yoga"
+        ]
+        
+        for activity in activity_keywords:
+            if activity in message_lower:
+                mentioned_activities.append(activity)
+        
+        params["mentioned_activities"] = mentioned_activities
+        
+        return params
     
     async def handle_routine_request(self, intent_data: Dict[str, Any]) -> MCPToolResult:
         """Handle a routine-related request using MCP tools."""
@@ -172,6 +401,8 @@ class RoutineMCPClient:
                 return await self._handle_complete_activity(intent_data)
             elif intent == "get_suggestions":
                 return await self._handle_get_suggestions(intent_data)
+            elif intent == "smart_schedule":
+                return await self._handle_smart_schedule(intent_data)
             else:
                 return MCPToolResult(
                     success=False,
@@ -242,15 +473,68 @@ class RoutineMCPClient:
         """Handle start routine request."""
         try:
             child_id = intent_data["child_id"]
+            routine_name = intent_data.get("routine_name")
             
             # First get the child's routines to find the one to start
             routines_result = await self._handle_get_routines(child_id)
             
-            # For now, start the first available routine
-            # In a real implementation, you'd parse the routine name or ask the user
+            if not routines_result.success:
+                return MCPToolResult(
+                    success=False,
+                    content="🌈 I couldn't find your routines. Let's create one first! ✨",
+                    error="Failed to get routines"
+                )
+            
+            # Parse the routines from the result to find matching routine
+            routine_id = None
+            
+            if routine_name:
+                # Try to find routine by name (case-insensitive partial match)
+                routine_name_lower = routine_name.lower()
+                
+                # Get the routines list through MCP server
+                try:
+                    routines_args = {"child_id": child_id}
+                    routines_mcp_result = await self.mcp_server._get_child_routines(routines_args)
+                    
+                    if routines_mcp_result.content:
+                        # Parse the routine data to find matching routine
+                        import json
+                        try:
+                            routines_data = json.loads(routines_mcp_result.content[0].text)
+                            routines = routines_data.get("routines", [])
+                            
+                            for routine in routines:
+                                if routine_name_lower in routine.get("name", "").lower():
+                                    routine_id = routine.get("id")
+                                    break
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            # If parsing fails, try a simple approach
+                            pass
+                except:
+                    pass
+            
+            # Default to active routine if no specific routine found
+            if routine_id is None:
+                # Try to get active routine from sessions
+                try:
+                    from database.db_manager import DatabaseManager
+                    db = DatabaseManager()
+                    active_sessions = await db.get_active_routine_sessions(child_id)
+                    if active_sessions:
+                        # Use the most recently started active session
+                        routine_id = active_sessions[0]['routine_id']
+                        print(f"DEBUG: Using active routine ID {routine_id} for completion")
+                    else:
+                        print(f"WARNING: No active routine sessions found for child {child_id}")
+                        routine_id = None  # Don't default to routine 1
+                except Exception as e:
+                    print(f"ERROR: Failed to get active sessions: {e}")
+                    routine_id = None
+                
             args = {
                 "child_id": child_id,
-                "routine_id": 1  # This should be dynamically determined
+                "routine_id": routine_id
             }
             
             result = await self.mcp_server._start_routine(args)
@@ -261,6 +545,7 @@ class RoutineMCPClient:
             )
             
         except Exception as e:
+            logger.error(f"Error starting routine: {str(e)}")
             return MCPToolResult(
                 success=False,
                 content="🌈 Let's start your routine adventure! ✨",
@@ -270,10 +555,43 @@ class RoutineMCPClient:
     async def _handle_complete_activity(self, intent_data: Dict[str, Any]) -> MCPToolResult:
         """Handle activity completion request."""
         try:
+            child_id = intent_data["child_id"]
+            activity_name = intent_data.get("activity_name")
+            
+            if not activity_name:
+                return MCPToolResult(
+                    success=False,
+                    content="🌈 I'm not sure which activity you completed. Can you tell me more specifically? ✨",
+                    error="No activity name provided"
+                )
+            
+            # Get active routine from sessions
+            routine_id = None
+            try:
+                from database.db_manager import DatabaseManager
+                db = DatabaseManager()
+                active_sessions = await db.get_active_routine_sessions(child_id)
+                if active_sessions:
+                    routine_id = active_sessions[0]['routine_id']
+                    print(f"DEBUG: Using active routine ID {routine_id} for activity completion")
+                else:
+                    return MCPToolResult(
+                        success=False,
+                        content="🌈 It looks like you don't have an active routine right now. Would you like to start one? ✨",
+                        error="No active routine found"
+                    )
+            except Exception as e:
+                print(f"ERROR: Failed to get active routine: {e}")
+                return MCPToolResult(
+                    success=False,
+                    content="🌈 Let me help you with your routine! ✨",
+                    error=f"Database error: {e}"
+                )
+            
             args = {
-                "child_id": intent_data["child_id"],
-                "routine_id": 1,  # This should be dynamically determined
-                "activity_name": intent_data.get("activity_name", "activity")
+                "child_id": child_id,
+                "routine_id": routine_id,
+                "activity_name": activity_name
             }
             
             result = await self.mcp_server._complete_activity(args)
@@ -315,6 +633,122 @@ class RoutineMCPClient:
                 content="🌈 Let me think of some colorful activities for you! ✨",
                 error=str(e)
             )
+    
+    async def _handle_smart_schedule(self, intent_data: Dict[str, Any]) -> MCPToolResult:
+        """Handle smart schedule generation request using AI."""
+        try:
+            child_id = intent_data["child_id"]
+            message = intent_data["message"]
+            
+            # Extract smart schedule parameters
+            time_of_day = intent_data.get("time_of_day", "any")
+            activity_preferences = intent_data.get("activity_preferences", [])
+            duration = intent_data.get("duration", "medium")
+            energy_level = intent_data.get("energy_level", "medium")
+            mentioned_activities = intent_data.get("mentioned_activities", [])
+            
+            # Get child's existing routines for context
+            from database.db_manager import DatabaseManager
+            db = DatabaseManager()
+            existing_routines = await db.get_child_routines(child_id)
+            
+            # Create AI prompt for smart schedule generation
+            ai_prompt = self._create_smart_schedule_prompt(
+                time_of_day, activity_preferences, duration, 
+                energy_level, mentioned_activities, existing_routines, message
+            )
+            
+            # Generate AI suggestions using the assistant's AI client
+            from core.ai_assistant import SpecialKidsAI
+            
+            # Create a temporary AI instance to generate suggestions
+            ai_assistant = SpecialKidsAI()
+            
+            # Generate smart activity suggestions
+            ai_response = await ai_assistant._use_openai(ai_prompt, ai_assistant.system_prompt)
+            
+            # Parse and format the AI response
+            formatted_response = self._format_smart_schedule_response(ai_response, time_of_day)
+            
+            return MCPToolResult(
+                success=True,
+                content=formatted_response
+            )
+            
+        except Exception as e:
+            logger.error(f"Smart schedule generation error: {str(e)}")
+            return MCPToolResult(
+                success=False,
+                content="🌈 Let me create a magical schedule for you! I'll suggest some wonderful activities based on what you like! ✨",
+                error=str(e)
+            )
+    
+    def _create_smart_schedule_prompt(self, time_of_day: str, preferences: List[str], 
+                                    duration: str, energy_level: str, mentioned_activities: List[str],
+                                    existing_routines: List, original_message: str) -> str:
+        """Create an AI prompt for smart schedule generation."""
+        
+        prompt = f"""
+        Create a personalized daily schedule for an autistic child based on these preferences:
+        
+        Original request: "{original_message}"
+        Time of day: {time_of_day}
+        Activity preferences: {', '.join(preferences) if preferences else 'balanced mix'}
+        Duration preference: {duration}
+        Energy level: {energy_level}
+        Mentioned activities: {', '.join(mentioned_activities) if mentioned_activities else 'none specified'}
+        
+        Consider these guidelines for autistic children:
+        - Predictable, structured routines
+        - Clear transitions between activities
+        - Sensory-friendly activities
+        - Visual supports and clear instructions
+        - Balance of preferred and new activities
+        - Calming activities for regulation
+        
+        Create 4-6 activities with:
+        1. Activity name
+        2. Duration (5-30 minutes based on preference)
+        3. Simple description
+        4. Why it's good for this time/preference
+        
+        Format as a friendly, encouraging response from Rainbow Bridge.
+        """
+        
+        return prompt
+    
+    def _format_smart_schedule_response(self, ai_response: str, time_of_day: str) -> str:
+        """Format the AI response into a structured, child-friendly format."""
+        
+        # Add Rainbow Bridge personality and visual elements
+        formatted = f"🌈✨ Here's your magical {time_of_day} schedule, created just for you! ✨🌈\n\n"
+        formatted += ai_response
+        formatted += f"\n\n🌟 Remember, you can always adjust these activities to make them perfect for you! 🌟"
+        formatted += f"\n💫 Would you like me to create a routine with these activities? 💫"
+        
+        return formatted
+    
+    async def _get_active_sessions(self, child_id: int) -> List[Dict]:
+        """Get active routine sessions for a child."""
+        try:
+            # Use raw SQL to get active sessions
+            import aiosqlite
+            async with aiosqlite.connect("special_kids.db") as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("""
+                    SELECT rs.*, r.name as routine_name 
+                    FROM routine_sessions rs
+                    JOIN routines r ON rs.routine_id = r.id
+                    WHERE rs.child_id = ? AND rs.status = 'in_progress'
+                    ORDER BY rs.started_at DESC
+                """, (child_id,))
+                
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+                
+        except Exception as e:
+            logger.error(f"Failed to get active sessions: {str(e)}")
+            return []
 
 # Global client instance
 routine_mcp_client = None

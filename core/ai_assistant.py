@@ -199,6 +199,7 @@ class SpecialKidsAI:
         try:
             # First check if this is a routine-related request
             if self.routine_mcp_client:
+                logger.info(f"Checking routine intent for message: '{message}' (child_id: {child_id})")
                 routine_intent = await self.routine_mcp_client.detect_routine_intent(message, child_id)
                 if routine_intent:
                     logger.info(f"Detected routine intent: {routine_intent['intent']}")
@@ -216,6 +217,8 @@ class SpecialKidsAI:
                             "llm_source": "mcp_routine",
                             "routine_action": routine_intent["intent"]
                         }
+                else:
+                    logger.info(f"No routine intent detected for: '{message}'")
             
             ai_text = ""
             
@@ -506,6 +509,286 @@ class SpecialKidsAI:
                 }
             ]
     
+    async def generate_smart_schedule(
+        self,
+        child_id: int,
+        time_of_day: str,
+        preferences: List[str] = None,
+        energy_level: str = "medium",
+        duration: str = "medium"
+    ) -> Dict[str, Any]:
+        """Generate an AI-powered smart schedule for a child."""
+        try:
+            preferences = preferences or []
+            
+            # Create comprehensive prompt for smart schedule
+            prompt = f"""
+You are Rainbow Bridge, a magical companion. Create a simple activity schedule for an autistic child.
+
+Parameters:
+- Time: {time_of_day}
+- Preferences: {', '.join(preferences) if preferences else 'variety'}
+- Energy: {energy_level}
+
+You MUST respond in exactly this format:
+
+1. [Activity Name]
+Duration: [X] minutes
+[Simple description]
+
+2. [Activity Name]  
+Duration: [X] minutes
+[Simple description]
+
+3. [Activity Name]
+Duration: [X] minutes
+[Simple description]
+
+4. [Activity Name]
+Duration: [X] minutes
+[Simple description]
+
+Make activities appropriate for {time_of_day} time with {energy_level} energy level.
+Each activity should be 5-20 minutes.
+Keep descriptions simple and encouraging.
+Focus on autism-friendly activities: predictable, sensory-friendly, calming.
+
+Example format:
+1. Deep Breathing
+Duration: 10 minutes
+Take slow, calm breaths
+
+Start your response with the numbered list immediately.
+            """
+            
+            # Generate AI response
+            try:
+                ai_text = await self._use_openai(prompt, self.system_prompt)
+            except Exception as e:
+                logger.error(f"AI generation failed: {e}")
+                # Provide a structured fallback response
+                ai_text = f"""
+🌈 Hello my wonderful friend! Let me create some magical {time_of_day} activities for you! ✨
+
+Here are wonderful activities for you:
+
+1. Calm Breathing Exercise
+Duration: 10 minutes
+Take slow, peaceful breaths with Rainbow Bridge
+
+2. Creative Art Time
+Duration: 15 minutes
+Draw, color, or create something beautiful
+
+3. Gentle Movement
+Duration: 10 minutes
+Stretch or move your body in a way that feels good
+
+4. Quiet Time Activity
+Duration: 15 minutes
+Choose a peaceful activity you enjoy
+
+🌈 These activities are specially chosen for your {energy_level} energy level! Have a wonderful time! ✨
+                """
+            
+            # Parse the response into structured format
+            activities = self._parse_smart_schedule(ai_text)
+            
+            return {
+                "success": True,
+                "schedule_text": ai_text,
+                "activities": activities,
+                "time_of_day": time_of_day,
+                "preferences": preferences,
+                "energy_level": energy_level
+            }
+            
+        except Exception as e:
+            logger.error(f"Smart schedule generation error: {str(e)}")
+            
+            # Provide a comprehensive fallback schedule
+            fallback_activities = []
+            
+            if time_of_day == "morning":
+                fallback_activities = [
+                    {"name": "Gentle Wake-Up Breathing", "description": "Take 5 slow, deep breaths to start your day peacefully", "duration": "5 minutes", "visual_cue": "breathing"},
+                    {"name": "Morning Stretches", "description": "Gentle stretches to wake up your body", "duration": "10 minutes", "visual_cue": "stretching"},
+                    {"name": "Breakfast Preparation", "description": "Help prepare or eat a healthy breakfast", "duration": "20 minutes", "visual_cue": "food"},
+                    {"name": "Daily Planning", "description": "Look at your schedule and plan your day", "duration": "10 minutes", "visual_cue": "calendar"}
+                ]
+            elif time_of_day == "afternoon":
+                fallback_activities = [
+                    {"name": "Creative Art Time", "description": "Draw, paint, or create something colorful", "duration": "20 minutes", "visual_cue": "art"},
+                    {"name": "Active Play", "description": "Move your body with fun physical activity", "duration": "15 minutes", "visual_cue": "play"},
+                    {"name": "Snack Break", "description": "Enjoy a healthy snack and hydrate", "duration": "10 minutes", "visual_cue": "snack"},
+                    {"name": "Learning Activity", "description": "Explore something new or practice a skill", "duration": "20 minutes", "visual_cue": "learning"}
+                ]
+            else:  # evening
+                fallback_activities = [
+                    {"name": "Quiet Reading", "description": "Read a favorite book or story", "duration": "15 minutes", "visual_cue": "reading"},
+                    {"name": "Calming Music", "description": "Listen to peaceful, soothing music", "duration": "10 minutes", "visual_cue": "music"},
+                    {"name": "Bedtime Routine", "description": "Prepare for sleep with calming activities", "duration": "20 minutes", "visual_cue": "sleep"},
+                    {"name": "Gratitude Reflection", "description": "Think about good things from your day", "duration": "5 minutes", "visual_cue": "heart"}
+                ]
+            
+            # Adjust activities based on energy level
+            if energy_level == "low":
+                fallback_activities = [act for act in fallback_activities if "quiet" in act["description"].lower() or "calm" in act["description"].lower()][:3]
+            elif energy_level == "high":
+                fallback_activities = [act for act in fallback_activities if "active" in act["description"].lower() or "creative" in act["description"].lower()][:4]
+            
+            return {
+                "success": False,
+                "schedule_text": f"🌈 Rainbow Bridge created some wonderful {time_of_day} activities for you! Even when magic needs a moment, we always have beautiful activities ready! ✨",
+                "activities": fallback_activities,
+                "error": str(e),
+                "fallback_used": True
+            }
+    
+    def _parse_smart_schedule(self, schedule_text: str) -> List[Dict[str, Any]]:
+        """Parse AI-generated smart schedule into structured activities."""
+        import re
+        activities = []
+        lines = schedule_text.split('\n')
+        
+        current_activity = {}
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Skip empty lines and decorative lines
+            if not line or line.startswith('🌈') or line.startswith('=') or len(line) < 3:
+                i += 1
+                continue
+            
+            # Look for numbered activity patterns (1., 2., etc.)
+            activity_match = re.match(r'^(\d+)\.?\s*(.+)', line)
+            if activity_match:
+                # Save previous activity if exists
+                if current_activity.get('name'):
+                    activities.append(current_activity)
+                
+                # Start new activity
+                activity_name = activity_match.group(2).strip()
+                current_activity = {
+                    'name': activity_name[:50],
+                    'description': activity_name[:100],  # Use name as default description
+                    'duration': "15 minutes",
+                    'visual_cue': self._get_visual_cue_for_activity(activity_name)
+                }
+                
+                # Look ahead for duration and description in next few lines
+                j = i + 1
+                while j < len(lines) and j < i + 5:  # Look ahead max 5 lines
+                    next_line = lines[j].strip()
+                    
+                    if not next_line:
+                        j += 1
+                        continue
+                    
+                    # Check if we hit the next activity
+                    if re.match(r'^\d+\.', next_line):
+                        break
+                    
+                    # Check for duration
+                    if 'duration' in next_line.lower():
+                        duration_match = re.search(r'(\d+)\s*(?:minutes?|mins?)', next_line)
+                        if duration_match:
+                            current_activity['duration'] = f"{duration_match.group(1)} minutes"
+                    
+                    # Check for description (substantial line that's not duration)
+                    elif len(next_line) > 10 and 'duration' not in next_line.lower() and not next_line.startswith('🌈'):
+                        current_activity['description'] = next_line[:100]
+                    
+                    j += 1
+                
+                i = j - 1  # Adjust main loop index
+            
+            i += 1
+        
+        # Add the last activity
+        if current_activity.get('name'):
+            activities.append(current_activity)
+        
+        # If we didn't parse any activities, try a simpler approach
+        if not activities:
+            activities = self._simple_parse_activities(schedule_text)
+        
+        # Final fallback activities if all parsing fails
+        if not activities:
+            activities = self._get_fallback_activities()
+        
+        return activities[:6]  # Return maximum 6 activities
+    
+    def _simple_parse_activities(self, text: str) -> List[Dict[str, Any]]:
+        """Simple backup parsing method."""
+        import re
+        activities = []
+        
+        # Look for any lines that might be activities
+        lines = text.split('\n')
+        for line in lines:
+            line = line.strip()
+            
+            # Skip empty lines and decorative content
+            if not line or line.startswith('🌈') or len(line) < 5:
+                continue
+            
+            # Look for numbered items or bullet points
+            if re.match(r'^[\d\-\*\•]\s*', line) or any(keyword in line.lower() for keyword in ['time', 'activity', 'exercise', 'reading', 'play']):
+                activity_name = re.sub(r'^[\d\-\*\•\.]\s*', '', line)
+                activities.append({
+                    'name': activity_name[:50],
+                    'description': activity_name[:100],
+                    'duration': "15 minutes",
+                    'visual_cue': self._get_visual_cue_for_activity(activity_name)
+                })
+        
+        return activities[:4]
+    
+    def _get_visual_cue_for_activity(self, activity_name: str) -> str:
+        """Get appropriate visual cue based on activity name."""
+        activity_lower = activity_name.lower()
+        
+        if any(word in activity_lower for word in ['breath', 'calm', 'relax']):
+            return "meditation"
+        elif any(word in activity_lower for word in ['read', 'book', 'story']):
+            return "reading"
+        elif any(word in activity_lower for word in ['draw', 'art', 'creative', 'paint']):
+            return "creative"
+        elif any(word in activity_lower for word in ['stretch', 'move', 'exercise']):
+            return "movement"
+        elif any(word in activity_lower for word in ['music', 'listen', 'song']):
+            return "music"
+        elif any(word in activity_lower for word in ['play', 'game', 'fun']):
+            return "play"
+        else:
+            return "activity_icon"
+    
+    def _get_fallback_activities(self) -> List[Dict[str, Any]]:
+        """Get fallback activities when parsing completely fails."""
+        return [
+            {
+                "name": "Calm Down Time",
+                "description": "Take deep breaths and relax with Rainbow Bridge",
+                "duration": "10 minutes",
+                "visual_cue": "meditation"
+            },
+            {
+                "name": "Creative Fun Time",
+                "description": "Choose a colorful activity you enjoy",
+                "duration": "15 minutes", 
+                "visual_cue": "creative"
+            },
+            {
+                "name": "Gentle Movement",
+                "description": "Move your body in a way that feels good",
+                "duration": "10 minutes",
+                "visual_cue": "movement"
+            }
+        ]
+    
     def _parse_routine_suggestions(self, suggestions_text: str) -> List[Dict[str, Any]]:
         """Parse AI-generated routine suggestions into structured format."""
         # Simple parsing - in a real implementation, this would be more sophisticated
@@ -614,7 +897,8 @@ class SpecialKidsAI:
             "get_routines": ["list", "calendar", "activities", "rainbow"],
             "start_routine": ["play", "start", "arrow_right", "sparkles"],
             "complete_activity": ["checkmark", "star", "trophy", "celebration"],
-            "get_suggestions": ["lightbulb", "question", "thinking", "rainbow"]
+            "get_suggestions": ["lightbulb", "question", "thinking", "rainbow"],
+            "smart_schedule": ["magic_wand", "sparkles", "calendar", "rainbow", "clock", "star"]
         }
         
         return routine_visual_cues.get(intent, ["rainbow", "friendly_robot"])
@@ -626,7 +910,8 @@ class SpecialKidsAI:
             "get_routines": ["view_routines", "start_routine", "edit_routine"],
             "start_routine": ["begin_activity", "view_steps", "get_help"],
             "complete_activity": ["next_activity", "view_progress", "celebrate"],
-            "get_suggestions": ["create_routine", "try_activity", "explore_more"]
+            "get_suggestions": ["create_routine", "try_activity", "explore_more"],
+            "smart_schedule": ["create_routine", "customize_schedule", "start_activity", "save_schedule"]
         }
         
         return routine_actions.get(intent, ["continue_chat"])

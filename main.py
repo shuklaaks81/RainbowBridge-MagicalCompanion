@@ -75,20 +75,54 @@ async def home(request: Request):
 
 @app.get("/child/{child_id}")
 async def get_child_dashboard(request: Request, child_id: int):
-    """Get child-specific dashboard."""
+    """Get child-specific dashboard with MCP-enhanced routine management."""
     child_data = await db_manager.get_child(child_id)
     if not child_data:
         raise HTTPException(status_code=404, detail="Child not found")
     
+    # Get routines with enhanced data for MCP integration
     routines = await routine_manager.get_child_routines(child_id)
+    
+    # Enhance routines with additional MCP-compatible information
+    enhanced_routines = []
+    for routine in routines:
+        enhanced_routine = routine.copy()
+        
+        # Ensure activities is a list (handle both string and list formats)
+        if isinstance(routine.get('activities'), str):
+            try:
+                import json
+                enhanced_routine['activities'] = json.loads(routine['activities'])
+            except:
+                enhanced_routine['activities'] = [routine['activities']]
+        elif not routine.get('activities'):
+            enhanced_routine['activities'] = []
+        
+        # Calculate total activities for display
+        enhanced_routine['total_activities'] = len(enhanced_routine['activities'])
+        
+        # Add MCP-friendly metadata
+        enhanced_routine['mcp_enabled'] = True
+        enhanced_routine['supports_natural_language'] = True
+        
+        enhanced_routines.append(enhanced_routine)
+    
     progress = await progress_tracker.get_child_progress(child_id)
     
-    return templates.TemplateResponse("child_dashboard.html", {
+    # Add MCP integration status to template context
+    template_context = {
         "request": request,
         "child": child_data,
-        "routines": routines,
-        "progress": progress
-    })
+        "routines": enhanced_routines,
+        "progress": progress,
+        "mcp_integration": {
+            "enabled": True,
+            "server_status": "active",
+            "natural_language_support": True
+        }
+    }
+    
+    return templates.TemplateResponse("child_dashboard.html", template_context)
 
 @app.post("/api/chat")
 async def chat_with_ai(
@@ -243,19 +277,197 @@ async def get_all_children():
             status_code=500
         )
 
+@app.get("/api/child/{child_id}/active-sessions")
+async def get_child_active_sessions(child_id: int):
+    """Get active routine sessions for a child."""
+    try:
+        # Use database manager to get active sessions
+        import aiosqlite
+        async with aiosqlite.connect("special_kids.db") as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT rs.*, r.name as routine_name 
+                FROM routine_sessions rs
+                JOIN routines r ON rs.routine_id = r.id
+                WHERE rs.child_id = ? AND rs.status = 'in_progress'
+                ORDER BY rs.started_at DESC
+            """, (child_id,))
+            
+            rows = await cursor.fetchall()
+            sessions = [dict(row) for row in rows]
+            
+            return JSONResponse(content=sessions)
+    
+    except Exception as e:
+        logger.error(f"Failed to get active sessions for child {child_id}: {str(e)}")
+        return JSONResponse(content=[], status_code=500)
+
 @app.post("/api/routine/start")
 async def start_routine_session(
     routine_id: int = Form(...),
     child_id: int = Form(...)
 ):
-    """Start a routine session."""
+    """Start a routine session with MCP integration."""
     try:
-        session = await routine_manager.start_routine(routine_id, child_id)
-        return JSONResponse(content={"success": True, "session": session})
+        success = await routine_manager.start_routine(routine_id)  # Returns True/False
+        
+        if not success:
+            return JSONResponse(
+                content={"success": False, "error": "Could not start routine"},
+                status_code=400
+            )
+        
+        # Get routine details for MCP response
+        routine_data = await db_manager.get_routine(routine_id)
+        
+        # Create MCP-compatible response
+        response_data = {
+            "success": True, 
+            "routine": {
+                "id": routine_id,
+                "name": routine_data.get("name", "Unknown Routine"),
+                "activities": routine_data.get("activities", []),
+                "mcp_message": f"🌟 Great! I've started your {routine_data.get('name', 'routine')}. Let's do this together! 💪"
+            }
+        }
+        
+        return JSONResponse(content=response_data)
     except Exception as e:
         logger.error(f"Failed to start routine: {str(e)}")
         return JSONResponse(
             content={"error": "Failed to start routine"},
+            status_code=500
+        )
+
+@app.get("/api/routine/{routine_id}/status")
+async def get_routine_status(routine_id: int, child_id: int = None):
+    """Get the current status of a routine session with MCP integration."""
+    try:
+        # Get routine data
+        routine_data = await db_manager.get_routine(routine_id)
+        if not routine_data:
+            return JSONResponse(content={"error": "Routine not found"}, status_code=404)
+        
+        # Get any active session data (you might need to implement this in routine_manager)
+        # For now, return basic routine information
+        
+        response_data = {
+            "routine_id": routine_id,
+            "name": routine_data.get("name"),
+            "activities": routine_data.get("activities", []),
+            "total_activities": len(routine_data.get("activities", [])),
+            "status": "ready",  # Could be: ready, in_progress, completed
+            "progress": 0,  # Percentage complete
+            "current_activity": None,
+            "mcp_message": f"Your {routine_data.get('name', 'routine')} is ready to start! 🌟"
+        }
+        
+        return JSONResponse(content=response_data)
+    except Exception as e:
+        logger.error(f"Failed to get routine status: {str(e)}")
+        return JSONResponse(
+            content={"error": "Failed to get routine status"},
+            status_code=500
+        )
+
+@app.post("/api/routine/{routine_id}/complete-activity")
+async def complete_routine_activity(
+    routine_id: int,
+    activity_name: str = Form(...),
+    child_id: int = Form(...)
+):
+    """Mark an activity as complete with MCP integration."""
+    try:
+        # Complete the activity using routine manager
+        success = await routine_manager.complete_activity(routine_id, activity_name)
+        
+        if success:
+            # Get updated routine status
+            routine_data = await db_manager.get_routine(routine_id)
+            activities = routine_data.get("activities", [])
+            
+            # Calculate progress
+            total_activities = len(activities)
+            # This is simplified - you'd need proper session tracking for real progress
+            progress = 50  # Placeholder
+            
+            response_data = {
+                "success": True,
+                "activity_completed": activity_name,
+                "progress": progress,
+                "total_activities": total_activities,
+                "mcp_message": f"🎉 Awesome job! You completed: {activity_name}. Keep going! ⭐"
+            }
+        else:
+            response_data = {
+                "success": False,
+                "error": "Failed to complete activity",
+                "mcp_message": "I had trouble marking that activity as complete. Let's try again! 🤗"
+            }
+        
+        return JSONResponse(content=response_data)
+    except Exception as e:
+        logger.error(f"Failed to complete activity: {str(e)}")
+        return JSONResponse(
+            content={"error": "Failed to complete activity"},
+            status_code=500
+        )
+
+@app.get("/api/routines/suggest")
+async def suggest_routines(child_id: int):
+    """Get routine suggestions for MCP integration."""
+    try:
+        # Get existing routines to avoid duplicates
+        existing_routines = await routine_manager.get_child_routines(child_id)
+        existing_names = [r.get("name", "").lower() for r in existing_routines]
+        
+        # Common routine suggestions for autistic children
+        suggestions = [
+            {
+                "name": "Morning Routine",
+                "description": "Start your day with structure and calm",
+                "activities": ["Wake up and stretch", "Brush teeth", "Get dressed", "Eat breakfast", "Pack bag"],
+                "time": "07:30",
+                "emoji": "🌅"
+            },
+            {
+                "name": "Bedtime Routine", 
+                "description": "Wind down for peaceful sleep",
+                "activities": ["Take bath", "Put on pajamas", "Brush teeth", "Read story", "Quiet time"],
+                "time": "20:00",
+                "emoji": "🌙"
+            },
+            {
+                "name": "Learning Time",
+                "description": "Fun and structured learning activities", 
+                "activities": ["Reading time", "Creative activities", "Brain games", "Celebrate learning"],
+                "time": "15:30",
+                "emoji": "📚"
+            },
+            {
+                "name": "Calm Down Routine",
+                "description": "Tools to feel calm and safe",
+                "activities": ["Deep breathing", "Count to 10", "Hug comfort item", "Think happy thoughts"],
+                "time": "as_needed",
+                "emoji": "😌"
+            }
+        ]
+        
+        # Filter out existing routines
+        filtered_suggestions = [
+            s for s in suggestions 
+            if s["name"].lower() not in existing_names
+        ]
+        
+        return JSONResponse(content={
+            "suggestions": filtered_suggestions,
+            "mcp_message": "Here are some routine ideas that might help! 🌈✨"
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to get routine suggestions: {str(e)}")
+        return JSONResponse(
+            content={"error": "Failed to get suggestions"},
             status_code=500
         )
 

@@ -248,26 +248,51 @@ class RoutineManager:
     async def start_routine(self, routine_id: int) -> bool:
         """Start a routine session."""
         try:
+            logger.info(f"🔄 Starting routine {routine_id}...")
             routine = await self.get_routine(routine_id)
             if not routine:
+                logger.error(f"❌ Routine {routine_id} not found")
                 return False
             
+            logger.info(f"✅ Found routine: {routine.name}")
+            
+            # Check for existing active sessions for this child and routine
+            try:
+                existing_session = await self._get_active_session(routine.child_id, routine_id)
+                if existing_session:
+                    logger.info(f"📋 Resuming existing session {existing_session['id']} for routine {routine_id}")
+                    return True
+            except Exception as e:
+                logger.warning(f"Could not check for existing sessions: {str(e)}")
+            
             # Create a new routine session
+            logger.info(f"🔄 Creating session for child {routine.child_id}...")
+            
+            # Get activities count safely
+            activities_count = 0
+            if hasattr(routine, 'activities') and routine.activities:
+                if isinstance(routine.activities, list):
+                    activities_count = len(routine.activities)
+                else:
+                    logger.warning(f"Routine activities is not a list: {type(routine.activities)}")
+            
             session_data = {
                 "routine_id": routine_id,
                 "child_id": routine.child_id,
                 "started_at": datetime.now(),
                 "current_activity": 0,
+                "total_activities": activities_count,
                 "status": "in_progress",
-                "progress": 0
+                "progress": 0.0
             }
             
+            logger.info(f"Session data: {session_data}")
             session_id = await self.db_manager.create_routine_session(session_data)
-            logger.info(f"Started routine session {session_id} for routine {routine_id}")
+            logger.info(f"✅ Started routine session {session_id} for routine {routine_id}")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to start routine {routine_id}: {str(e)}")
+            logger.error(f"❌ Failed to start routine {routine_id}: {str(e)}")
             return False
     
     async def complete_activity(self, routine_id: int, activity_name: str) -> bool:
@@ -277,15 +302,33 @@ class RoutineManager:
             if not routine:
                 return False
             
-            # Find the activity index
+            # Find the activity index with fuzzy matching
             activity_index = None
+            activity_name_lower = activity_name.lower()
+            
+            # First try exact match
             for i, activity in enumerate(routine.activities):
-                if activity.name == activity_name:
+                if activity.name.lower() == activity_name_lower:
                     activity_index = i
                     break
             
+            # If no exact match, try partial matching
             if activity_index is None:
-                logger.warning(f"Activity {activity_name} not found in routine {routine_id}")
+                for i, activity in enumerate(routine.activities):
+                    activity_lower = activity.name.lower()
+                    # Check if activity name contains the input or vice versa
+                    if (activity_name_lower in activity_lower or 
+                        activity_lower in activity_name_lower or
+                        self._fuzzy_match_activity(activity_name_lower, activity_lower)):
+                        activity_index = i
+                        logger.info(f"🔍 Fuzzy matched '{activity_name}' to '{activity.name}'")
+                        break
+            
+            if activity_index is None:
+                logger.warning(f"Activity '{activity_name}' not found in routine {routine_id}")
+                # List available activities for debugging
+                available_activities = [a.name for a in routine.activities]
+                logger.info(f"Available activities: {available_activities}")
                 return False
             
             # Mark as completed
@@ -442,3 +485,63 @@ class RoutineManager:
         except Exception as e:
             logger.error(f"Failed to get routine suggestions: {str(e)}")
             return []
+    
+    async def _get_active_session(self, child_id: int, routine_id: int) -> Optional[Dict]:
+        """Get active session for a specific child and routine."""
+        try:
+            # Use raw SQL query to check for active sessions
+            import aiosqlite
+            async with aiosqlite.connect(self.db_manager.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("""
+                    SELECT * FROM routine_sessions 
+                    WHERE child_id = ? AND routine_id = ? AND status = 'in_progress'
+                    ORDER BY started_at DESC LIMIT 1
+                """, (child_id, routine_id))
+                
+                row = await cursor.fetchone()
+                if row:
+                    return dict(row)
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get active session: {str(e)}")
+            return None
+    
+    def _fuzzy_match_activity(self, input_name: str, activity_name: str) -> bool:
+        """Fuzzy match activity names to handle variations."""
+        # Define common activity mappings
+        activity_mappings = {
+            "teeth": ["brush teeth", "brushing teeth", "dental care"],
+            "brush": ["brush teeth", "brushing teeth", "dental care"],
+            "breakfast": ["eat breakfast", "morning meal", "morning snack"],
+            "lunch": ["eat lunch", "midday meal", "afternoon meal"],
+            "dinner": ["eat dinner", "evening meal", "supper"],
+            "shower": ["take shower", "showering", "bathing"],
+            "bath": ["take bath", "bathing", "showering"],
+            "homework": ["do homework", "study", "schoolwork"],
+            "play": ["playtime", "free play", "playing"],
+            "exercise": ["physical activity", "workout", "movement"],
+            "medicine": ["medication", "take medicine", "pills"],
+            "vitamin": ["vitamins", "supplements", "take vitamins"]
+        }
+        
+        # Check if input matches any mapped activities
+        for key, variations in activity_mappings.items():
+            if key in input_name:
+                if any(var.lower() in activity_name.lower() for var in variations):
+                    return True
+            if key in activity_name:
+                if any(var.lower() in input_name.lower() for var in variations):
+                    return True
+        
+        # Check for word overlap (at least 50% common words)
+        input_words = set(input_name.split())
+        activity_words = set(activity_name.split())
+        
+        if len(input_words) > 0 and len(activity_words) > 0:
+            common_words = input_words.intersection(activity_words)
+            overlap_ratio = len(common_words) / min(len(input_words), len(activity_words))
+            return overlap_ratio >= 0.5
+        
+        return False

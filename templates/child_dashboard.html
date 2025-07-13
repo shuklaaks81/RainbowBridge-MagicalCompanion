@@ -440,8 +440,30 @@
                 text-align: center;
             }
             
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
             .visual-cards-container {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(4, 1fr);
+                gap: 8px;
+            }
+            
+            .visual-card {
+                padding: 10px;
+                min-height: 70px;
+            }
+            
+            .visual-card .icon {
+                font-size: 1.2rem;
+            }
+            
+            .visual-card .label {
+                font-size: 0.8rem;
+            }
+            
+            .chat-messages {
+                height: 400px;
             }
         }
     </style>
@@ -449,7 +471,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>� {{ child.name }}'s Rainbow Bridge</h1>
+            <h1>🌈 {{ child.name }}'s Rainbow Bridge</h1>
             <a href="/" class="back-btn">← Back to Home</a>
         </div>
 
@@ -593,6 +615,8 @@
                 }
             } catch (error) {
                 console.error('Error loading active sessions:', error);
+                // Gracefully handle the error - just don't show active sessions
+                console.log('No active sessions loaded - this is normal for new users');
             }
         }
 
@@ -619,18 +643,49 @@
         async function loadVisualCards() {
             try {
                 const response = await fetch('/api/visual-cards');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 const cards = await response.json();
                 
                 const container = document.getElementById('visualCardsContainer');
-                container.innerHTML = cards.map(card => `
-                    <div class="visual-card" onclick="toggleVisualCard('${card.id}', this)">
-                        <div class="icon">${getCardIcon(card.category, card.name)}</div>
-                        <div class="label">${card.name}</div>
-                    </div>
-                `).join('');
+                if (cards && cards.length > 0) {
+                    container.innerHTML = cards.map(card => `
+                        <div class="visual-card" onclick="toggleVisualCard('${card.id}', this)">
+                            <div class="icon">${getCardIcon(card.category, card.name)}</div>
+                            <div class="label">${card.name}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    // Fallback visual cards if API fails
+                    container.innerHTML = getDefaultVisualCards();
+                }
             } catch (error) {
                 console.error('Error loading visual cards:', error);
+                // Provide fallback visual cards
+                const container = document.getElementById('visualCardsContainer');
+                container.innerHTML = getDefaultVisualCards();
             }
+        }
+
+        function getDefaultVisualCards() {
+            const defaultCards = [
+                {category: 'emotions', name: 'Happy', icon: '😊'},
+                {category: 'emotions', name: 'Sad', icon: '😢'},
+                {category: 'emotions', name: 'Calm', icon: '😌'},
+                {category: 'needs', name: 'Help', icon: '🆘'},
+                {category: 'needs', name: 'Break', icon: '⏸️'},
+                {category: 'activities', name: 'Play', icon: '🎮'},
+                {category: 'social', name: 'Yes', icon: '✅'},
+                {category: 'social', name: 'No', icon: '❌'}
+            ];
+            
+            return defaultCards.map((card, index) => `
+                <div class="visual-card" onclick="toggleVisualCard('card-${index}', this)">
+                    <div class="icon">${card.icon}</div>
+                    <div class="label">${card.name}</div>
+                </div>
+            `).join('');
         }
 
         function getCardIcon(category, name) {
@@ -734,16 +789,20 @@
                     body: formData
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const result = await response.json();
                 
-                if (result.text) {
+                if (result && result.text) {
                     addMessageToChat(result.text, 'ai', result.visual_cues);
                 } else {
-                    addMessageToChat('Sorry, I couldn\'t understand that. Can you try again?', 'ai');
+                    addMessageToChat('Sorry, I couldn\'t understand that. Can you try again? 🌈', 'ai');
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
-                addMessageToChat('Sorry, there was an error. Please try again.', 'ai');
+                addMessageToChat('Sorry, there was an error connecting to Rainbow Bridge. Please try again! 🌈✨', 'ai');
             }
         }
 
@@ -752,7 +811,7 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
             
-            // Determine profile info
+            // Determine profile info with better fallback handling
             let profileImage, senderName;
             if (sender === 'user') {
                 profileImage = `/static/images/profiles/${childProfilePicture}`;
@@ -765,7 +824,8 @@
             
             let html = `
                 <div class="message-profile">
-                    <img src="${profileImage}" alt="${senderName}" onerror="this.src='/static/images/profiles/default.svg'">
+                    <img src="${profileImage}" alt="${senderName}" 
+                         onerror="this.onerror=null; this.src='/static/images/profiles/default.svg';">
                 </div>
                 <div class="message-content">
                     <div class="message-sender">${senderName}</div>
@@ -796,9 +856,22 @@
                 'comfort_hug': '🤗',
                 'practice_icon': '💪',
                 'listening': '👂',
-                'musical_note': '🎵'
+                'musical_note': '🎵',
+                'rainbow': '🌈',
+                'sparkles': '✨',
+                'magic_wand': '🪄',
+                'calendar': '📅',
+                'clock': '🕐',
+                'checkmark': '✅',
+                'trophy': '🏆',
+                'celebration': '🎉',
+                'lightbulb': '💡',
+                'question': '❓',
+                'thinking': '🤔'
             };
-            return icons[cue] || cue;
+            
+            // Return the icon if found, otherwise return the cue as text with a default emoji
+            return icons[cue] || `✨ ${cue}`;
         }
 
         // Allow Enter key to send message

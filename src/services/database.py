@@ -5,10 +5,13 @@ Main database service that coordinates specialized database managers.
 
 from typing import Dict, List, Optional, Any
 import logging
+import aiosqlite
+import json
+from datetime import datetime
 
 from src.models.entities import (
     Child, Routine, Activity, Interaction, Milestone, 
-    ActivityLog, VisualCard
+    ActivityLog, VisualCard, CommunicationLevel, ActivityStatus, RoutineStatus
 )
 from src.services.database_core import DatabaseCore
 from src.services.routine_manager import RoutineManager
@@ -294,15 +297,19 @@ class DatabaseService:
             
             routines = []
             for routine_row in routine_rows:
-                # Get activities for each routine
-                cursor = await db.execute("""
-                    SELECT * FROM activities WHERE routine_id = ? 
-                    ORDER BY sequence_order
-                """, (routine_row[0],))  # routine_row[0] is the id
-                activity_rows = await cursor.fetchall()
-                
-                routine = self._rows_to_routine(routine_row, activity_rows)
-                routines.append(routine)
+                try:
+                    # Get activities for each routine
+                    cursor = await db.execute("""
+                        SELECT * FROM activities WHERE routine_id = ? 
+                        ORDER BY sequence_order
+                    """, (routine_row[0],))  # routine_row[0] is the id
+                    activity_rows = await cursor.fetchall()
+                    
+                    routine = self._rows_to_routine(routine_row, activity_rows)
+                    routines.append(routine)
+                except Exception as e:
+                    logger.error(f"Error processing routine {routine_row[0] if routine_row else 'unknown'}: {e}")
+                    continue
             
             return routines
     
@@ -460,6 +467,44 @@ class DatabaseService:
             updated_at=datetime.fromisoformat(row[9]) if row[9] else None
         )
     
+    def _safe_routine_status(self, status_value):
+        """Safely convert status value to RoutineStatus enum."""
+        if isinstance(status_value, int):
+            # Handle legacy integer values
+            status_map = {
+                0: RoutineStatus.INACTIVE,
+                1: RoutineStatus.ACTIVE,
+                2: RoutineStatus.COMPLETED,
+                3: RoutineStatus.PAUSED
+            }
+            return status_map.get(status_value, RoutineStatus.INACTIVE)
+        elif isinstance(status_value, str):
+            try:
+                return RoutineStatus(status_value)
+            except ValueError:
+                return RoutineStatus.INACTIVE
+        else:
+            return RoutineStatus.INACTIVE
+
+    def _safe_activity_status(self, status_value):
+        """Safely convert status value to ActivityStatus enum."""
+        if isinstance(status_value, int):
+            # Handle legacy integer values
+            status_map = {
+                0: ActivityStatus.NOT_STARTED,
+                1: ActivityStatus.IN_PROGRESS,
+                2: ActivityStatus.COMPLETED,
+                3: ActivityStatus.SKIPPED
+            }
+            return status_map.get(status_value, ActivityStatus.NOT_STARTED)
+        elif isinstance(status_value, str):
+            try:
+                return ActivityStatus(status_value)
+            except ValueError:
+                return ActivityStatus.NOT_STARTED
+        else:
+            return ActivityStatus.NOT_STARTED
+
     def _rows_to_routine(self, routine_row, activity_rows) -> Routine:
         """Convert database rows to Routine object."""
         activities = []
@@ -472,7 +517,7 @@ class DatabaseService:
                 visual_cue=activity_row[6],
                 audio_cue=activity_row[7],
                 instructions=json.loads(activity_row[8]) if activity_row[8] else [],
-                status=ActivityStatus(activity_row[9]),
+                status=self._safe_activity_status(activity_row[9]),
                 completed_at=datetime.fromisoformat(activity_row[10]) if activity_row[10] else None,
                 created_at=datetime.fromisoformat(activity_row[11]) if activity_row[11] else None
             )
@@ -486,7 +531,7 @@ class DatabaseService:
             activities=activities,
             schedule_time=datetime.strptime(routine_row[4], "%H:%M").time() if routine_row[4] else None,
             days_of_week=json.loads(routine_row[5]) if routine_row[5] else [],
-            status=RoutineStatus(routine_row[6]),
+            status=self._safe_routine_status(routine_row[6]),
             current_activity_index=routine_row[7],
             started_at=datetime.fromisoformat(routine_row[8]) if routine_row[8] else None,
             completed_at=datetime.fromisoformat(routine_row[9]) if routine_row[9] else None,

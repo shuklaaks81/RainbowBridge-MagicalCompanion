@@ -225,6 +225,243 @@
             margin-bottom: 15px;
         }
 
+        /* Enhanced Demo Section Styles */
+        .demo-section {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 40px 30px;
+            border-radius: 20px;
+            margin: 40px 0;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .section-header h2 {
+            color: #4a90e2;
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-header p {
+            color: #666;
+            font-size: 1.2rem;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 25px;
+        }
+
+        .demo-card {
+            background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .demo-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #ff9a9e, #fecfef, #a8edea, #fed6e3);
+        }
+
+        .demo-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            border-color: #4a90e2;
+        }
+
+        .demo-icon {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            animation: gentle-bounce 3s ease-in-out infinite;
+        }
+
+        @keyframes gentle-bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+
+        .demo-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .demo-card p {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .demo-preview {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 2px dashed #e0e6ff;
+        }
+
+        .schedule-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .schedule-item:last-child {
+            border-bottom: none;
+        }
+
+        .time {
+            font-weight: bold;
+            color: #4a90e2;
+            font-size: 0.9rem;
+        }
+
+        .activity {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .communication-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .comm-card {
+            background: white;
+            padding: 15px 10px;
+            border-radius: 8px;
+            font-size: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease;
+            cursor: pointer;
+        }
+
+        .comm-card:hover {
+            transform: scale(1.1);
+        }
+
+        .routine-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .step {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: left;
+            font-size: 0.9rem;
+            color: #555;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .progress-bar {
+            background: #e0e6ff;
+            border-radius: 20px;
+            height: 30px;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #50c878, #4a90e2);
+            height: 100%;
+            border-radius: 20px;
+            position: relative;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        .achievements {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background: linear-gradient(135deg, #ff9a9e, #fecfef);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .demo-btn {
+            margin-top: 15px;
+            background: linear-gradient(135deg, #4a90e2, #50c878);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .demo-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s;
+        }
+
+        .demo-btn:hover::before {
+            left: 100%;
+        }
+
+        /* Demo Modal Styles */
+        .demo-modal {
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .demo-modal .modal-content {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #a8edea 100%);
+            color: white;
+            text-align: center;
+            max-width: 600px;
+        }
+
+        .demo-interactive {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+            color: #333;
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2rem;
@@ -236,6 +473,58 @@
             
             .action-card {
                 padding: 20px;
+            }
+
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .demo-card {
+                padding: 20px;
+            }
+
+            .section-header h2 {
+                font-size: 1.8rem;
+            }
+
+            .communication-cards {
+                grid-template-columns: repeat(2, 1fr) !important;
+            }
+
+            .modal-content {
+                width: 95%;
+                margin: 2% auto;
+                padding: 20px;
+            }
+
+            .demo-interactive {
+                padding: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .header p {
+                font-size: 1rem;
+            }
+
+            .demo-section {
+                padding: 20px 15px;
+            }
+
+            .communication-cards {
+                grid-template-columns: 1fr !important;
+            }
+
+            .comm-card {
+                padding: 15px !important;
             }
         }
     </style>
@@ -277,6 +566,85 @@
             </div>
         </div>
 
+        <!-- Enhanced Interactive Demo Section -->
+        <div class="demo-section">
+            <div class="section-header">
+                <h2>🎪 Experience the Magic - Interactive Demos</h2>
+                <p>Try our features in a safe, friendly environment</p>
+            </div>
+            
+            <div class="demo-grid">
+                <div class="demo-card smart-schedule">
+                    <div class="demo-icon">🌅</div>
+                    <h3>Smart Daily Schedules</h3>
+                    <p>Watch AI create perfect daily routines tailored for your child</p>
+                    <div class="demo-preview">
+                        <div class="schedule-item">
+                            <span class="time">8:00 AM</span>
+                            <span class="activity">🥞 Gentle Breakfast Time</span>
+                        </div>
+                        <div class="schedule-item">
+                            <span class="time">9:00 AM</span>
+                            <span class="activity">🎨 Creative Art Session</span>
+                        </div>
+                        <div class="schedule-item">
+                            <span class="time">10:00 AM</span>
+                            <span class="activity">🌳 Nature Walk</span>
+                        </div>
+                    </div>
+                    <button class="btn demo-btn" onclick="startSmartScheduleDemo()">Try Smart Schedule</button>
+                </div>
+
+                <div class="demo-card communication">
+                    <div class="demo-icon">💬</div>
+                    <h3>Visual Communication</h3>
+                    <p>Explore colorful cards and symbols that help express feelings</p>
+                    <div class="demo-preview">
+                        <div class="communication-cards">
+                            <div class="comm-card happy">😊</div>
+                            <div class="comm-card hungry">🍎</div>
+                            <div class="comm-card tired">😴</div>
+                            <div class="comm-card play">🎮</div>
+                        </div>
+                    </div>
+                    <button class="btn demo-btn" onclick="startCommunicationDemo()">Explore Cards</button>
+                </div>
+
+                <div class="demo-card routine">
+                    <div class="demo-icon">🏠</div>
+                    <h3>Routine Builder</h3>
+                    <p>Create step-by-step visual guides for daily activities</p>
+                    <div class="demo-preview">
+                        <div class="routine-steps">
+                            <div class="step">1️⃣ Brush Teeth</div>
+                            <div class="step">2️⃣ Put on Pajamas</div>
+                            <div class="step">3️⃣ Read Story</div>
+                            <div class="step">4️⃣ Sleep Time</div>
+                        </div>
+                    </div>
+                    <button class="btn demo-btn" onclick="startRoutineDemo()">Build Routine</button>
+                </div>
+
+                <div class="demo-card progress">
+                    <div class="demo-icon">📈</div>
+                    <h3>Progress Celebration</h3>
+                    <p>Watch achievements grow and celebrate every success</p>
+                    <div class="demo-preview">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 75%">
+                                <span class="progress-text">✨ 75% Complete!</span>
+                            </div>
+                        </div>
+                        <div class="achievements">
+                            <span class="badge">🏆 Daily Routine</span>
+                            <span class="badge">⭐ Communication</span>
+                        </div>
+                    </div>
+                    <button class="btn demo-btn" onclick="startProgressDemo()">See Progress</button>
+                </div>
+            </div>
+        </div>
+
         <div class="features">
             <div class="feature">
                 <div class="icon">🎯</div>
@@ -301,6 +669,106 @@
         </div>
 
         <div id="childrenList" class="children-list"></div>
+    </div>
+
+    <!-- Enhanced Demo Modals -->
+    <div id="smartScheduleModal" class="modal demo-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('smartScheduleModal')">&times;</span>
+            <h2>🌅 Smart Schedule Demo</h2>
+            <div class="demo-interactive">
+                <p><strong>Ask me to create a schedule!</strong></p>
+                <div class="form-group">
+                    <input type="text" id="scheduleRequest" placeholder="e.g., 'Plan my morning with calm activities'" style="margin-bottom: 15px;">
+                    <button class="btn" onclick="generateDemoSchedule()">Create Schedule</button>
+                </div>
+                <div id="scheduleResult" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="communicationModal" class="modal demo-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('communicationModal')">&times;</span>
+            <h2>💬 Communication Cards Demo</h2>
+            <div class="demo-interactive">
+                <p><strong>Click the cards to express feelings!</strong></p>
+                <div class="communication-cards" style="grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0;">
+                    <div class="comm-card" onclick="playCardSound('happy')" style="padding: 20px;">😊<br><small>Happy</small></div>
+                    <div class="comm-card" onclick="playCardSound('sad')" style="padding: 20px;">😢<br><small>Sad</small></div>
+                    <div class="comm-card" onclick="playCardSound('hungry')" style="padding: 20px;">🍎<br><small>Hungry</small></div>
+                    <div class="comm-card" onclick="playCardSound('tired')" style="padding: 20px;">😴<br><small>Tired</small></div>
+                    <div class="comm-card" onclick="playCardSound('play')" style="padding: 20px;">🎮<br><small>Play</small></div>
+                    <div class="comm-card" onclick="playCardSound('help')" style="padding: 20px;">🤝<br><small>Help</small></div>
+                </div>
+                <div id="cardFeedback" style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.5); border-radius: 10px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="routineModal" class="modal demo-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('routineModal')">&times;</span>
+            <h2>🏠 Routine Builder Demo</h2>
+            <div class="demo-interactive">
+                <p><strong>Build a bedtime routine!</strong></p>
+                <div class="routine-builder">
+                    <div id="routineSteps">
+                        <div class="step" onclick="completeStep(this)">1️⃣ Brush Teeth <span style="float: right;">⭕</span></div>
+                        <div class="step" onclick="completeStep(this)">2️⃣ Put on Pajamas <span style="float: right;">⭕</span></div>
+                        <div class="step" onclick="completeStep(this)">3️⃣ Read Story <span style="float: right;">⭕</span></div>
+                        <div class="step" onclick="completeStep(this)">4️⃣ Sleep Time <span style="float: right;">⭕</span></div>
+                    </div>
+                    <div id="routineProgress" style="margin-top: 20px;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="routineProgressFill" style="width: 0%">
+                                <span class="progress-text" id="routineProgressText">0% Complete</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn" onclick="resetRoutine()" style="margin-top: 15px;">Start Over</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="progressModal" class="modal demo-modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('progressModal')">&times;</span>
+            <h2>📈 Progress Celebration Demo</h2>
+            <div class="demo-interactive">
+                <p><strong>Watch your achievements grow!</strong></p>
+                <div class="progress-showcase">
+                    <h4>Daily Goals</h4>
+                    <div class="progress-bar" style="margin: 10px 0;">
+                        <div class="progress-fill" style="width: 80%">
+                            <span class="progress-text">Communication: 80%</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar" style="margin: 10px 0;">
+                        <div class="progress-fill" style="width: 65%">
+                            <span class="progress-text">Routine: 65%</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar" style="margin: 10px 0;">
+                        <div class="progress-fill" style="width: 90%">
+                            <span class="progress-text">Social Skills: 90%</span>
+                        </div>
+                    </div>
+                    
+                    <h4 style="margin-top: 25px;">Recent Achievements</h4>
+                    <div class="achievements" style="margin: 15px 0;">
+                        <span class="badge">🌟 First Words</span>
+                        <span class="badge">🏆 Daily Routine</span>
+                        <span class="badge">💝 Helpful Friend</span>
+                        <span class="badge">🎨 Creative Expression</span>
+                    </div>
+                    
+                    <button class="btn" onclick="celebrateAchievement()" style="margin-top: 15px;">🎉 Celebrate!</button>
+                    <div id="celebrationMessage" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Child Profile Modal -->
@@ -432,6 +900,165 @@
 
         // Load children on page load
         window.addEventListener('load', loadChildren);
+
+        // Enhanced Demo Functions
+        function startSmartScheduleDemo() {
+            openModal('smartScheduleModal');
+        }
+
+        function startCommunicationDemo() {
+            openModal('communicationModal');
+        }
+
+        function startRoutineDemo() {
+            openModal('routineModal');
+            resetRoutine();
+        }
+
+        function startProgressDemo() {
+            openModal('progressModal');
+        }
+
+        // Smart Schedule Demo
+        function generateDemoSchedule() {
+            const request = document.getElementById('scheduleRequest').value;
+            const resultDiv = document.getElementById('scheduleResult');
+            
+            if (!request.trim()) {
+                resultDiv.innerHTML = '<p style="color: #ff6b6b;">Please enter a request first!</p>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<p>🤖 Creating your perfect schedule...</p>';
+            
+            setTimeout(() => {
+                const schedules = {
+                    'morning': [
+                        { time: '7:30 AM', activity: '🌅 Gentle Wake-up Routine' },
+                        { time: '8:00 AM', activity: '🥞 Peaceful Breakfast' },
+                        { time: '8:30 AM', activity: '🧘 Mindful Breathing' },
+                        { time: '9:00 AM', activity: '📚 Quiet Reading Time' }
+                    ],
+                    'afternoon': [
+                        { time: '1:00 PM', activity: '🍎 Healthy Lunch' },
+                        { time: '1:30 PM', activity: '🎨 Creative Art Time' },
+                        { time: '2:30 PM', activity: '🌳 Nature Walk' },
+                        { time: '3:30 PM', activity: '🎵 Music & Movement' }
+                    ],
+                    'evening': [
+                        { time: '6:00 PM', activity: '🍽️ Family Dinner' },
+                        { time: '7:00 PM', activity: '🎮 Gentle Play Time' },
+                        { time: '8:00 PM', activity: '📖 Bedtime Story' },
+                        { time: '8:30 PM', activity: '😴 Sleep Preparation' }
+                    ]
+                };
+
+                let selectedSchedule = schedules.morning;
+                if (request.toLowerCase().includes('afternoon')) selectedSchedule = schedules.afternoon;
+                if (request.toLowerCase().includes('evening') || request.toLowerCase().includes('night')) selectedSchedule = schedules.evening;
+
+                const scheduleHtml = selectedSchedule.map(item => 
+                    `<div class="schedule-item"><span class="time">${item.time}</span><span class="activity">${item.activity}</span></div>`
+                ).join('');
+
+                resultDiv.innerHTML = `
+                    <h4>✨ Your Personalized Schedule</h4>
+                    <div class="demo-preview">${scheduleHtml}</div>
+                    <p style="color: #50c878; font-weight: bold;">🎉 Perfect! This schedule is designed just for you!</p>
+                `;
+            }, 2000);
+        }
+
+        // Communication Demo
+        function playCardSound(emotion) {
+            const feedback = document.getElementById('cardFeedback');
+            const responses = {
+                'happy': '😊 Great! You\'re feeling happy! That makes me happy too!',
+                'sad': '😢 I see you\'re feeling sad. Would you like a gentle hug? 🤗',
+                'hungry': '🍎 You\'re hungry! Let\'s find something yummy to eat!',
+                'tired': '😴 You look tired. Maybe it\'s time for a cozy rest?',
+                'play': '🎮 You want to play! What would be fun to do together?',
+                'help': '🤝 You need help! I\'m here for you. What can I do?'
+            };
+
+            feedback.innerHTML = `<p style="color: #4a90e2; font-weight: bold;">${responses[emotion]}</p>`;
+            
+            // Add visual feedback
+            const cards = document.querySelectorAll('.comm-card');
+            cards.forEach(card => card.style.transform = 'scale(1)');
+            event.target.style.transform = 'scale(1.2)';
+            
+            setTimeout(() => {
+                event.target.style.transform = 'scale(1)';
+            }, 1000);
+        }
+
+        // Routine Demo
+        let completedSteps = 0;
+        const totalSteps = 4;
+
+        function completeStep(stepElement) {
+            if (stepElement.classList.contains('completed')) return;
+            
+            stepElement.classList.add('completed');
+            stepElement.style.background = '#d4edda';
+            stepElement.style.color = '#155724';
+            stepElement.querySelector('span').innerHTML = '✅';
+            
+            completedSteps++;
+            updateRoutineProgress();
+            
+            if (completedSteps === totalSteps) {
+                setTimeout(() => {
+                    alert('🎉 Wonderful! You completed your bedtime routine! Sweet dreams! 🌙');
+                }, 500);
+            }
+        }
+
+        function updateRoutineProgress() {
+            const percentage = (completedSteps / totalSteps) * 100;
+            const progressFill = document.getElementById('routineProgressFill');
+            const progressText = document.getElementById('routineProgressText');
+            
+            progressFill.style.width = percentage + '%';
+            progressText.textContent = Math.round(percentage) + '% Complete';
+            
+            if (percentage === 100) {
+                progressText.textContent = '🎉 All Done!';
+            }
+        }
+
+        function resetRoutine() {
+            completedSteps = 0;
+            const steps = document.querySelectorAll('#routineSteps .step');
+            steps.forEach(step => {
+                step.classList.remove('completed');
+                step.style.background = 'white';
+                step.style.color = '#555';
+                step.querySelector('span').innerHTML = '⭕';
+            });
+            updateRoutineProgress();
+        }
+
+        // Progress Demo
+        function celebrateAchievement() {
+            const messageDiv = document.getElementById('celebrationMessage');
+            const celebrations = [
+                '🎉 Amazing progress! You\'re doing so well!',
+                '⭐ Look how much you\'ve grown! I\'m proud of you!',
+                '🌈 Every step forward is a victory! Keep shining!',
+                '🏆 You\'re becoming more confident every day!',
+                '💫 Your hard work is paying off beautifully!'
+            ];
+            
+            const randomCelebration = celebrations[Math.floor(Math.random() * celebrations.length)];
+            messageDiv.innerHTML = `<p style="color: #4a90e2; font-weight: bold; font-size: 1.1rem; animation: gentle-bounce 1s ease-in-out;">${randomCelebration}</p>`;
+            
+            // Add confetti effect
+            setTimeout(() => {
+                messageDiv.innerHTML += '<div style="text-align: center; font-size: 2rem; animation: gentle-bounce 2s ease-in-out;">🎊🎈🌟🎊🎈</div>';
+            }, 1000);
+        }
     </script>
 </body>
 </html>

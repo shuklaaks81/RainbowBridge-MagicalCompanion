@@ -23,6 +23,7 @@ share/python-wheels/
 MANIFEST
 
 # Environment variables
+credentials_backup.txt
 .env
 .venv
 env/

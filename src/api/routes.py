@@ -86,14 +86,27 @@ class APIRouter:
             if not child:
                 raise HTTPException(status_code=404, detail="Child not found")
             
-            routines = await self.db_service.get_child_routines(child_id)
+            try:
+                routines = await self.db_service.get_child_routines(child_id)
+            except Exception as e:
+                logger.error(f"Error fetching routines for child {child_id}: {e}")
+                routines = []
+            
+            # Create default progress data
+            progress = {
+                "communication_score": 75,
+                "routine_completion": 80,
+                "social_skills": 65,
+                "learning_progress": 70
+            }
             
             return self.templates.TemplateResponse(
                 "child_dashboard.html",
                 {
                     "request": request,
                     "child": child,
-                    "routines": routines
+                    "routines": routines,
+                    "progress": progress
                 }
             )
         

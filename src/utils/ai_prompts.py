@@ -3,7 +3,7 @@ AI Prompts utility for Rainbow Bridge
 Contains prompt templates and generation logic for AI interactions.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from src.models.entities import Child
 
 

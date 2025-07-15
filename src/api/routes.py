@@ -85,13 +85,31 @@ class APIRouter:
             child = await self.db_service.get_child_profile(child_id)
             if not child:
                 raise HTTPException(status_code=404, detail="Child not found")
-            
+
             try:
                 routines = await self.db_service.get_child_routines(child_id)
+                
+                # Get current activity context
+                active_routine = next(
+                    (r for r in routines if r.status.value == 'active'), None
+                )
+                
+                current_activity_context = None
+                if active_routine:
+                    progress_data = await self.db_service.get_routine_progress(active_routine.id)
+                    current_activity_context = {
+                        'routine_id': active_routine.id,
+                        'routine_name': active_routine.name,
+                        'current_activity': progress_data.get('current_activity'),
+                        'progress_percentage': progress_data.get('progress_percentage', 0),
+                        'remaining_activities': progress_data.get('total_activities', 0) - progress_data.get('completed_activities', 0)
+                    }
+                    
             except Exception as e:
                 logger.error(f"Error fetching routines for child {child_id}: {e}")
                 routines = []
-            
+                current_activity_context = None
+
             # Create default progress data
             progress = {
                 "communication_score": 75,
@@ -99,14 +117,15 @@ class APIRouter:
                 "social_skills": 65,
                 "learning_progress": 70
             }
-            
+
             return self.templates.TemplateResponse(
                 "child_dashboard.html",
                 {
                     "request": request,
                     "child": child,
                     "routines": routines,
-                    "progress": progress
+                    "progress": progress,
+                    "current_activity_context": current_activity_context
                 }
             )
         
@@ -191,11 +210,20 @@ class APIRouter:
         async def chat(
             child_id: int = Form(...),
             message: str = Form(...),
-            communication_type: str = Form("text")
+            communication_type: str = Form("text"),
+            routine_id: Optional[int] = Form(None),
+            current_activity: Optional[str] = Form(None)
         ):
             try:
+                # Build enhanced context for the AI assistant
+                context = {}
+                if routine_id:
+                    context['routine_id'] = routine_id
+                if current_activity:
+                    context['current_activity'] = current_activity
+                
                 response = await self.ai_assistant.process_message(
-                    child_id, message, communication_type
+                    child_id, message, communication_type, context
                 )
                 
                 return {
@@ -321,6 +349,35 @@ class APIRouter:
                 logger.error(f"Error fetching child routines: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
         
+        @self.app.get("/api/child/{child_id}/active-sessions")
+        async def get_child_active_sessions(child_id: int):
+            """Get active routine sessions for a child."""
+            try:
+                routines = await self.db_service.get_child_routines(child_id)
+                active_sessions = []
+                
+                for routine in routines:
+                    if routine.status.value == 'active':
+                        # Get current progress
+                        progress_data = await self.db_service.get_routine_progress(routine.id)
+                        
+                        session = {
+                            "routine_id": routine.id,
+                            "routine_name": routine.name,
+                            "started_at": routine.created_at.isoformat() if routine.created_at else None,
+                            "progress": progress_data.get('progress_percentage', 0),
+                            "current_activity": progress_data.get('current_activity'),
+                            "current_activity_index": progress_data.get('current_activity', {}).get('index', 0) if progress_data.get('current_activity') else 0,
+                            "total_activities": progress_data.get('total_activities', 0),
+                            "completed_activities": progress_data.get('completed_activities', 0)
+                        }
+                        active_sessions.append(session)
+                
+                return active_sessions
+            except Exception as e:
+                logger.error(f"Error getting active sessions for child {child_id}: {e}")
+                return []
+
         # Progress and analytics endpoints
         @self.app.get("/api/child/{child_id}/progress")
         async def get_child_progress(child_id: int):

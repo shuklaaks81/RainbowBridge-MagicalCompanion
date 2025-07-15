@@ -50,6 +50,10 @@ class AIAssistantService:
             # Get current routine context
             current_context = await self._get_current_context(child_id)
             
+            # Merge with any passed context
+            if context:
+                current_context.update(context)
+            
             # Detect intent and extract information using MCP
             mcp_result = await self.mcp_client.process_message(
                 message, child_id, current_context
@@ -158,22 +162,26 @@ class AIAssistantService:
     async def _get_openai_response(self, system_prompt: str, user_prompt: str) -> str:
         """Get response from OpenAI API."""
         try:
-            import openai
+            from openai import AsyncOpenAI
             
             if not self.ai_config.openai_api_key:
                 raise ValueError("OpenAI API key not configured")
             
-            openai.api_key = self.ai_config.openai_api_key
+            # Initialize the new OpenAI client
+            client = AsyncOpenAI(api_key=self.ai_config.openai_api_key)
             
-            response = await openai.Completion.acreate(
-                engine=self.ai_config.openai_model,
-                prompt=f"{system_prompt}\n\nUser: {user_prompt}\nAssistant:",
+            # Use the new chat completions API
+            response = await client.chat.completions.create(
+                model=self.ai_config.openai_model or "gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
                 max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                stop=["User:", "Human:"]
+                temperature=self.temperature
             )
             
-            return response.choices[0].text.strip()
+            return response.choices[0].message.content.strip()
             
         except Exception as e:
             logger.error(f"OpenAI API error: {e}")

@@ -281,12 +281,13 @@ async def get_all_children():
 async def get_child_active_sessions(child_id: int):
     """Get active routine sessions for a child."""
     try:
+        import json
         # Use database manager to get active sessions
         import aiosqlite
         async with aiosqlite.connect("special_kids.db") as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute("""
-                SELECT rs.*, r.name as routine_name 
+                SELECT rs.*, r.name as routine_name, r.activities 
                 FROM routine_sessions rs
                 JOIN routines r ON rs.routine_id = r.id
                 WHERE rs.child_id = ? AND rs.status = 'in_progress'
@@ -294,7 +295,23 @@ async def get_child_active_sessions(child_id: int):
             """, (child_id,))
             
             rows = await cursor.fetchall()
-            sessions = [dict(row) for row in rows]
+            sessions = []
+            
+            for row in rows:
+                session = dict(row)
+                # Parse activities JSON to get current activity name
+                try:
+                    activities = json.loads(row['activities']) if row['activities'] else []
+                    current_idx = row['current_activity']
+                    if 0 <= current_idx < len(activities):
+                        current_activity_name = activities[current_idx].get('name', f'Activity {current_idx + 1}')
+                        session['current_activity_name'] = current_activity_name
+                    else:
+                        session['current_activity_name'] = 'Unknown Activity'
+                except (json.JSONDecodeError, IndexError, TypeError):
+                    session['current_activity_name'] = f'Activity {row["current_activity"] + 1}'
+                
+                sessions.append(session)
             
             return JSONResponse(content=sessions)
     

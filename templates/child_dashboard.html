@@ -692,12 +692,22 @@
         const childId = {{ child.id }};
         const childName = "{{ child.name }}";
         const childProfilePicture = "{{ child.profile_picture or 'default.svg' }}";
+        const currentActivityContext = {{ current_activity_context | tojson if current_activity_context else 'null' }};
 
         // Load visual cards when page loads
         window.addEventListener('load', async function() {
             await loadVisualCards();
             await loadActiveRoutineSessions();
+            
+            // Show initial welcome message with current activity context
+            showInitialWelcomeMessage();
         });
+
+        function showInitialWelcomeMessage() {
+            // This will be handled by loadActiveRoutineSessions instead
+            // to avoid duplicate messages and ensure we use the latest data
+            console.log('Initial welcome message will be shown by active sessions loader');
+        }
 
         async function loadActiveRoutineSessions() {
             try {
@@ -710,16 +720,30 @@
                             routineName: session.routine_name,
                             startedAt: new Date(session.started_at),
                             progress: session.progress || 0,
-                            currentActivity: session.current_activity || 0
+                            currentActivity: session.current_activity || 0,
+                            currentActivityName: session.current_activity_name || 'Next Activity'
                         };
                         
                         // Update UI to show progress
                         updateRoutineProgress(session.routine_id, session.progress || 0, 'In Progress... 🌟');
                     });
                     
+                    // Always show a welcome message based on current state
                     if (sessions.length > 0) {
-                        addMessageToChat(`Welcome back! You have ${sessions.length} routine(s) in progress. You can continue where you left off! 🌈`, 'ai');
+                        // Create a detailed welcome message with activity names
+                        let welcomeMsg = `Welcome back! You have ${sessions.length} routine(s) in progress. 🌈\n\n`;
+                        sessions.forEach(session => {
+                            welcomeMsg += `📋 ${session.routine_name} - Current: ${session.current_activity_name}\n`;
+                        });
+                        welcomeMsg += '\nYou can continue where you left off! ✨';
+                        addMessageToChat(welcomeMsg, 'ai');
+                    } else {
+                        // No active sessions
+                        addMessageToChat(`🌈 Hello ${childName}! I'm your magical companion. What would you like to do today? ✨`, 'ai');
                     }
+                } else {
+                    // Error loading sessions, show default message
+                    addMessageToChat(`🌈 Hello ${childName}! I'm your magical companion. What would you like to do today? ✨`, 'ai');
                 }
             } catch (error) {
                 console.error('Error loading active sessions:', error);
@@ -891,6 +915,14 @@
                 formData.append('child_id', childId);
                 formData.append('message', finalMessage);
                 formData.append('communication_type', currentCommunicationMode);
+                
+                // Add current activity context if available
+                if (currentActivityContext && currentActivityContext.routine_id) {
+                    formData.append('routine_id', currentActivityContext.routine_id);
+                    if (currentActivityContext.current_activity) {
+                        formData.append('current_activity', currentActivityContext.current_activity.name);
+                    }
+                }
                 
                 const response = await fetch('/api/chat', {
                     method: 'POST',

@@ -394,62 +394,87 @@ class DatabaseService:
             return True
     
     async def get_routine_progress(self, routine_id: int) -> Dict[str, Any]:
-        """Get detailed routine progress information."""
+        """Get detailed routine progress information (legacy database version)."""
         async with aiosqlite.connect(self.db_path) as db:
-            # Get routine info
+            # Get routine info from legacy database
             cursor = await db.execute(
-                "SELECT * FROM routines WHERE id = ?", (routine_id,)
+                "SELECT id, child_id, name, activities, schedule_time, days_of_week, active, total_activities, created_at, updated_at FROM routines WHERE id = ?", 
+                (routine_id,)
             )
             routine_row = await cursor.fetchone()
             if not routine_row:
                 return {}
             
-            # Get activities with their status
-            cursor = await db.execute("""
-                SELECT id, name, status, completed_at, sequence_order
-                FROM activities WHERE routine_id = ? 
-                ORDER BY sequence_order
-            """, (routine_id,))
-            activity_rows = await cursor.fetchall()
-            
-            total_activities = len(activity_rows)
-            completed_activities = sum(1 for row in activity_rows if row[2] == 'completed')
-            progress_percentage = (completed_activities / total_activities * 100) if total_activities > 0 else 0
-            
-            # Find current activity
-            current_activity = None
-            current_activity_index = routine_row[7]  # current_activity_index column
-            
-            if current_activity_index < len(activity_rows):
-                current_row = activity_rows[current_activity_index]
-                current_activity = {
-                    'id': current_row[0],
-                    'name': current_row[1],
-                    'status': current_row[2],
-                    'index': current_activity_index
-                }
-            
-            return {
-                'routine_id': routine_id,
-                'routine_name': routine_row[2],
-                'status': routine_row[6],
-                'total_activities': total_activities,
-                'completed_activities': completed_activities,
-                'progress_percentage': round(progress_percentage, 1),
-                'current_activity': current_activity,
-                'current_activity_index': current_activity_index,
-                'started_at': routine_row[8],
-                'activities': [
-                    {
-                        'id': row[0],
-                        'name': row[1],
-                        'status': row[2],
-                        'completed_at': row[3],
-                        'sequence_order': row[4]
+            try:
+                # Parse activities from JSON
+                activities_json = routine_row[3]  # activities column
+                if activities_json:
+                    activities = json.loads(activities_json)
+                else:
+                    activities = []
+                
+                total_activities = len(activities)
+                completed_activities = sum(1 for activity in activities if activity.get('completed', False))
+                progress_percentage = (completed_activities / total_activities * 100) if total_activities > 0 else 0
+                
+                # Find current activity (first non-completed one)
+                current_activity = None
+                current_activity_index = 0
+                
+                for i, activity in enumerate(activities):
+                    if not activity.get('completed', False):
+                        current_activity = {
+                            'name': activity.get('name', f'Activity {i+1}'),
+                            'description': activity.get('description', ''),
+                            'index': i
+                        }
+                        current_activity_index = i
+                        break
+                
+                # If all activities are completed, show the last one
+                if current_activity is None and activities:
+                    last_activity = activities[-1]
+                    current_activity = {
+                        'name': last_activity.get('name', f'Activity {len(activities)}'),
+                        'description': last_activity.get('description', ''),
+                        'index': len(activities) - 1
                     }
-                    for row in activity_rows
-                ]
-            }
+                    current_activity_index = len(activities) - 1
+                
+                return {
+                    'routine_id': routine_id,
+                    'routine_name': routine_row[2],  # name column
+                    'status': 'active' if routine_row[6] else 'inactive',  # active column
+                    'total_activities': total_activities,
+                    'completed_activities': completed_activities,
+                    'progress_percentage': round(progress_percentage, 1),
+                    'current_activity': current_activity,
+                    'current_activity_index': current_activity_index,
+                    'started_at': routine_row[8],  # created_at
+                    'activities': [
+                        {
+                            'name': activity.get('name', f'Activity {i+1}'),
+                            'description': activity.get('description', ''),
+                            'completed': activity.get('completed', False),
+                            'index': i
+                        }
+                        for i, activity in enumerate(activities)
+                    ]
+                }
+            except (json.JSONDecodeError, TypeError, IndexError) as e:
+                logger.error(f"Error parsing routine {routine_id} activities: {e}")
+                return {
+                    'routine_id': routine_id,
+                    'routine_name': routine_row[2] if len(routine_row) > 2 else 'Unknown Routine',
+                    'status': 'error',
+                    'total_activities': 0,
+                    'completed_activities': 0,
+                    'progress_percentage': 0,
+                    'current_activity': None,
+                    'current_activity_index': 0,
+                    'started_at': routine_row[8] if len(routine_row) > 8 else None,
+                    'activities': []
+                }
     
     # Helper methods
     def _row_to_child(self, row) -> Child:
@@ -511,11 +536,11 @@ class DatabaseService:
         for activity_row in activity_rows:
             activity = Activity(
                 id=activity_row[0],
-                name=activity_row[2],
-                description=activity_row[3],
-                estimated_duration=activity_row[5],
-                visual_cue=activity_row[6],
-                audio_cue=activity_row[7],
+                name=activity_row[2], 
+                description=activity_row[3] or "",
+                estimated_duration=activity_row[5] or 5,
+                visual_cue=activity_row[6] or "",
+                audio_cue=activity_row[7] or "",
                 instructions=json.loads(activity_row[8]) if activity_row[8] else [],
                 status=self._safe_activity_status(activity_row[9]),
                 completed_at=datetime.fromisoformat(activity_row[10]) if activity_row[10] else None,
@@ -523,18 +548,32 @@ class DatabaseService:
             )
             activities.append(activity)
         
-        return Routine(
-            id=routine_row[0],
-            child_id=routine_row[1],
-            name=routine_row[2],
-            description=routine_row[3],
-            activities=activities,
-            schedule_time=datetime.strptime(routine_row[4], "%H:%M").time() if routine_row[4] else None,
-            days_of_week=json.loads(routine_row[5]) if routine_row[5] else [],
-            status=self._safe_routine_status(routine_row[6]),
-            current_activity_index=routine_row[7],
-            started_at=datetime.fromisoformat(routine_row[8]) if routine_row[8] else None,
-            completed_at=datetime.fromisoformat(routine_row[9]) if routine_row[9] else None,
-            created_at=datetime.fromisoformat(routine_row[10]) if routine_row[10] else None,
-            updated_at=datetime.fromisoformat(routine_row[11]) if routine_row[11] else None
-        )
+        # Handle different routine table schemas
+        if len(routine_row) >= 10:
+            # New schema with more columns
+            return Routine(
+                id=routine_row[0],
+                child_id=routine_row[1],
+                name=routine_row[2],
+                description=routine_row[3] if len(routine_row) > 3 else "",
+                activities=activities,
+                schedule_time=routine_row[4] if len(routine_row) > 4 else None,
+                days_of_week=json.loads(routine_row[5]) if len(routine_row) > 5 and routine_row[5] else [],
+                active=bool(routine_row[6]) if len(routine_row) > 6 else True,
+                created_at=datetime.fromisoformat(routine_row[8]) if len(routine_row) > 8 and routine_row[8] else None,
+                updated_at=datetime.fromisoformat(routine_row[9]) if len(routine_row) > 9 and routine_row[9] else None
+            )
+        else:
+            # Fallback for older/simpler schema
+            return Routine(
+                id=routine_row[0],
+                child_id=routine_row[1],
+                name=routine_row[2],
+                description="",
+                activities=activities,
+                schedule_time=None,
+                days_of_week=[],
+                active=True,
+                created_at=None,
+                updated_at=None
+            )

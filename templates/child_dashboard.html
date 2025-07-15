@@ -108,18 +108,56 @@
             padding: 15px;
             border-radius: 10px;
             max-width: 80%;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
         }
 
         .message.user {
             background: #4a90e2;
             color: white;
             margin-left: auto;
+            flex-direction: row-reverse;
             text-align: right;
         }
 
         .message.ai {
             background: #50c878;
             color: white;
+        }
+
+        .message-profile {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .message-profile img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+        }
+
+        .message-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .message-sender {
+            font-weight: bold;
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+            opacity: 0.9;
+        }
+
+        .message.user .message-sender {
+            text-align: right;
         }
 
         .visual-cues {
@@ -136,6 +174,20 @@
             border-radius: 20px;
             font-size: 0.9rem;
             border: 2px solid #4a90e2;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .visual-cue:hover {
+            background: #4a90e2;
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+        }
+
+        .visual-cue:active {
+            transform: scale(0.95);
         }
 
         .chat-input-area {
@@ -246,6 +298,13 @@
             margin-bottom: 10px;
             border-radius: 8px;
             border-left: 4px solid #4a90e2;
+            transition: all 0.3s ease;
+        }
+
+        .routine-item:hover {
+            background: #e3f2fd;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
 
         .routine-item h4 {
@@ -256,6 +315,59 @@
         .routine-item p {
             color: #666;
             font-size: 0.9rem;
+            margin: 5px 0;
+        }
+
+        .routine-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .routine-actions .btn {
+            font-size: 0.8rem;
+            padding: 8px 12px;
+        }
+
+        .routine-progress {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .routine-progress .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .routine-progress .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4a90e2, #50c878);
+            transition: width 0.3s ease;
+        }
+
+        .routine-progress .progress-text {
+            font-size: 0.8rem;
+            color: #666;
+            text-align: center;
+            margin: 0;
+        }
+
+        .no-routines {
+            text-align: center;
+            padding: 30px 20px;
+            color: #666;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #ddd;
+        }
+
+        .no-routines p {
+            margin: 5px 0;
         }
 
         .progress-item {
@@ -331,6 +443,84 @@
             color: white;
         }
 
+        .quick-communication {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .quick-section label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .quick-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .quick-btn {
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .quick-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .quick-btn.emotion {
+            border-color: #ff6b6b;
+            color: #ff6b6b;
+        }
+
+        .quick-btn.emotion:hover {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .quick-btn.need {
+            border-color: #4ecdc4;
+            color: #4ecdc4;
+        }
+
+        .quick-btn.need:hover {
+            background: #4ecdc4;
+            color: white;
+        }
+
+        .quick-btn.social {
+            border-color: #45b7d1;
+            color: #45b7d1;
+        }
+
+        .quick-btn.social:hover {
+            background: #45b7d1;
+            color: white;
+        }
+
+        .quick-btn.achievement {
+            border-color: #96ceb4;
+            color: #96ceb4;
+        }
+
+        .quick-btn.achievement:hover {
+            background: #96ceb4;
+            color: white;
+        }
+
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -342,8 +532,30 @@
                 text-align: center;
             }
             
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
             .visual-cards-container {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(4, 1fr);
+                gap: 8px;
+            }
+            
+            .visual-card {
+                padding: 10px;
+                min-height: 70px;
+            }
+            
+            .visual-card .icon {
+                font-size: 1.2rem;
+            }
+            
+            .visual-card .label {
+                font-size: 0.8rem;
+            }
+            
+            .chat-messages {
+                height: 400px;
             }
         }
     </style>
@@ -351,7 +563,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>� {{ child.name }}'s Rainbow Bridge</h1>
+            <h1>🌈 {{ child.name }}'s Rainbow Bridge</h1>
             <a href="/" class="back-btn">← Back to Home</a>
         </div>
 
@@ -363,11 +575,17 @@
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
                         <div class="message ai">
-                            <div>Hi {{ child.name }}! 🌈 I'm Rainbow Bridge, your colorful companion! How are you feeling today?</div>
-                            <div class="visual-cues">
-                                <span class="visual-cue">😊</span>
-                                <span class="visual-cue">🌈</span>
-                                <span class="visual-cue">❤️</span>
+                            <div class="message-profile">
+                                <img src="/static/images/profiles/rainbow-bridge.svg" alt="🌈 Rainbow Bridge">
+                            </div>
+                            <div class="message-content">
+                                <div class="message-sender">🌈 Rainbow Bridge</div>
+                                <div>Hi {{ child.name }}! 🌈 I'm Rainbow Bridge, your colorful companion! How are you feeling today?</div>
+                                <div class="visual-cues">
+                                    <span class="visual-cue" onclick="sendVisualCue('I feel happy')" title="Click to send: I feel happy">😊</span>
+                                    <span class="visual-cue" onclick="sendVisualCue('I like Rainbow Bridge')" title="Click to send: I like Rainbow Bridge">🌈</span>
+                                    <span class="visual-cue" onclick="sendVisualCue('I feel loved')" title="Click to send: I feel loved">❤️</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -381,6 +599,22 @@
                             <input type="text" class="chat-input" id="messageInput" placeholder="Type your message here...">
                             <button class="send-btn" onclick="sendMessage()">Send</button>
                         </div>
+                        
+                        <!-- Quick communication buttons -->
+                        <div class="quick-communication" id="quickCommButtons">
+                            <div class="quick-section">
+                                <label>Quick Responses:</label>
+                                <div class="quick-buttons">
+                                    <button class="quick-btn emotion" onclick="sendQuickMessage('I feel happy')">😊 Happy</button>
+                                    <button class="quick-btn emotion" onclick="sendQuickMessage('I feel sad')">😢 Sad</button>
+                                    <button class="quick-btn need" onclick="sendQuickMessage('I need help')">🆘 Help</button>
+                                    <button class="quick-btn need" onclick="sendQuickMessage('I am hungry')">🍽️ Hungry</button>
+                                    <button class="quick-btn social" onclick="sendQuickMessage('Thank you')">🙏 Thanks</button>
+                                    <button class="quick-btn achievement" onclick="sendQuickMessage('I did it!')">🎉 Done!</button>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div id="visualCardsContainer" class="visual-cards-container" style="display: none;"></div>
                     </div>
                 </div>
@@ -394,14 +628,30 @@
                     <div class="card-content">
                         <div id="routinesList">
                             {% for routine in routines %}
-                            <div class="routine-item">
+                            <div class="routine-item" id="routine-{{ routine.id }}">
                                 <h4>{{ routine.name }}</h4>
                                 <p>⏰ {{ routine.schedule_time }}</p>
-                                <button class="btn btn-success" onclick="startRoutine({{ routine.id }})">Start</button>
+                                <p>📝 {{ routine.total_activities or routine.activities|length }} activities</p>
+                                <div class="routine-actions">
+                                    <button class="btn btn-success" onclick="startRoutineWithMCP({{ routine.id }}, '{{ routine.name }}')">▶️ Start</button>
+                                    <button class="btn btn-info" onclick="showRoutineDetails({{ routine.id }})">👁️ View</button>
+                                </div>
+                                <div class="routine-progress" id="progress-{{ routine.id }}" style="display: none;">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: 0%"></div>
+                                    </div>
+                                    <p class="progress-text">Ready to start!</p>
+                                </div>
                             </div>
                             {% endfor %}
+                            {% if not routines %}
+                            <div class="no-routines">
+                                <p>No routines yet! 🌈</p>
+                                <p>Try saying: "I want to create a morning routine"</p>
+                            </div>
+                            {% endif %}
                         </div>
-                        <button class="btn" onclick="openCreateRoutineModal()">+ Create New Routine</button>
+                        <button class="btn" onclick="createRoutineWithMCP()">✨ Create New Routine</button>
                     </div>
                 </div>
 
@@ -438,12 +688,45 @@
     <script>
         let currentCommunicationMode = 'text';
         let selectedVisualCards = [];
+        let activeRoutineSessions = {}; // Track active routine sessions
         const childId = {{ child.id }};
+        const childName = "{{ child.name }}";
+        const childProfilePicture = "{{ child.profile_picture or 'default.svg' }}";
 
         // Load visual cards when page loads
         window.addEventListener('load', async function() {
             await loadVisualCards();
+            await loadActiveRoutineSessions();
         });
+
+        async function loadActiveRoutineSessions() {
+            try {
+                const response = await fetch(`/api/child/${childId}/active-sessions`);
+                if (response.ok) {
+                    const sessions = await response.json();
+                    sessions.forEach(session => {
+                        activeRoutineSessions[session.routine_id] = {
+                            routineId: session.routine_id,
+                            routineName: session.routine_name,
+                            startedAt: new Date(session.started_at),
+                            progress: session.progress || 0,
+                            currentActivity: session.current_activity || 0
+                        };
+                        
+                        // Update UI to show progress
+                        updateRoutineProgress(session.routine_id, session.progress || 0, 'In Progress... 🌟');
+                    });
+                    
+                    if (sessions.length > 0) {
+                        addMessageToChat(`Welcome back! You have ${sessions.length} routine(s) in progress. You can continue where you left off! 🌈`, 'ai');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading active sessions:', error);
+                // Gracefully handle the error - just don't show active sessions
+                console.log('No active sessions loaded - this is normal for new users');
+            }
+        }
 
         function setCommunicationMode(mode) {
             currentCommunicationMode = mode;
@@ -468,18 +751,49 @@
         async function loadVisualCards() {
             try {
                 const response = await fetch('/api/visual-cards');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 const cards = await response.json();
                 
                 const container = document.getElementById('visualCardsContainer');
-                container.innerHTML = cards.map(card => `
-                    <div class="visual-card" onclick="toggleVisualCard('${card.id}', this)">
-                        <div class="icon">${getCardIcon(card.category, card.name)}</div>
-                        <div class="label">${card.name}</div>
-                    </div>
-                `).join('');
+                if (cards && cards.length > 0) {
+                    container.innerHTML = cards.map(card => `
+                        <div class="visual-card" onclick="toggleVisualCard('${card.id}', this)">
+                            <div class="icon">${getCardIcon(card.category, card.name)}</div>
+                            <div class="label">${card.name}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    // Fallback visual cards if API fails
+                    container.innerHTML = getDefaultVisualCards();
+                }
             } catch (error) {
                 console.error('Error loading visual cards:', error);
+                // Provide fallback visual cards
+                const container = document.getElementById('visualCardsContainer');
+                container.innerHTML = getDefaultVisualCards();
             }
+        }
+
+        function getDefaultVisualCards() {
+            const defaultCards = [
+                {category: 'emotions', name: 'Happy', icon: '😊'},
+                {category: 'emotions', name: 'Sad', icon: '😢'},
+                {category: 'emotions', name: 'Calm', icon: '😌'},
+                {category: 'needs', name: 'Help', icon: '🆘'},
+                {category: 'needs', name: 'Break', icon: '⏸️'},
+                {category: 'activities', name: 'Play', icon: '🎮'},
+                {category: 'social', name: 'Yes', icon: '✅'},
+                {category: 'social', name: 'No', icon: '❌'}
+            ];
+            
+            return defaultCards.map((card, index) => `
+                <div class="visual-card" onclick="toggleVisualCard('card-${index}', this)">
+                    <div class="icon">${card.icon}</div>
+                    <div class="label">${card.name}</div>
+                </div>
+            `).join('');
         }
 
         function getCardIcon(category, name) {
@@ -533,6 +847,35 @@
             
             const finalMessage = message || selectedVisualCards.join(' + ');
             
+            // Check if this might be an activity completion for active sessions
+            const hasActiveSessions = Object.keys(activeRoutineSessions).length > 0;
+            const isCompletionMessage = /\b(done|finished|completed|complete|did it|finished with)\b/i.test(finalMessage);
+            
+            if (hasActiveSessions && isCompletionMessage) {
+                // Try to extract activity name and complete it
+                const sessionIds = Object.keys(activeRoutineSessions);
+                if (sessionIds.length === 1) {
+                    // Only one active session, assume they're completing an activity for it
+                    const routineId = sessionIds[0];
+                    const session = activeRoutineSessions[routineId];
+                    
+                    // Extract potential activity name from message
+                    const activityMatch = finalMessage.match(/(?:done with|finished|completed|did)\s+(.+?)(?:\.|$)/i);
+                    const activityName = activityMatch ? activityMatch[1].trim() : "current activity";
+                    
+                    addMessageToChat(finalMessage, 'user');
+                    input.value = '';
+                    selectedVisualCards = [];
+                    document.querySelectorAll('.visual-card.selected').forEach(card => {
+                        card.classList.remove('selected');
+                    });
+                    
+                    // Complete the activity directly
+                    await completeActivity(routineId, activityName);
+                    return;
+                }
+            }
+            
             // Add user message to chat
             addMessageToChat(finalMessage, 'user');
             
@@ -554,16 +897,20 @@
                     body: formData
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const result = await response.json();
                 
-                if (result.text) {
+                if (result && result.text) {
                     addMessageToChat(result.text, 'ai', result.visual_cues);
                 } else {
-                    addMessageToChat('Sorry, I couldn\'t understand that. Can you try again?', 'ai');
+                    addMessageToChat('Sorry, I couldn\'t understand that. Can you try again? 🌈', 'ai');
                 }
             } catch (error) {
                 console.error('Error sending message:', error);
-                addMessageToChat('Sorry, there was an error. Please try again.', 'ai');
+                addMessageToChat('Sorry, there was an error connecting to Rainbow Bridge. Please try again! 🌈✨', 'ai');
             }
         }
 
@@ -572,15 +919,37 @@
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
             
-            let html = `<div>${message}</div>`;
+            // Determine profile info with better fallback handling
+            let profileImage, senderName;
+            if (sender === 'user') {
+                profileImage = `/static/images/profiles/${childProfilePicture}`;
+                senderName = childName;
+            } else {
+                // AI/Rainbow Bridge
+                profileImage = '/static/images/profiles/rainbow-bridge.svg';
+                senderName = '🌈 Rainbow Bridge';
+            }
+            
+            let html = `
+                <div class="message-profile">
+                    <img src="${profileImage}" alt="${senderName}" 
+                         onerror="this.onerror=null; this.src='/static/images/profiles/default.svg';">
+                </div>
+                <div class="message-content">
+                    <div class="message-sender">${senderName}</div>
+                    <div>${message}</div>`;
             
             if (visualCues && visualCues.length > 0) {
                 html += '<div class="visual-cues">';
                 visualCues.forEach(cue => {
-                    html += `<span class="visual-cue">${getVisualCueIcon(cue)}</span>`;
+                    const cueIcon = getVisualCueIcon(cue);
+                    const cueText = cue.replace(/_/g, ' '); // Convert underscore to space for display
+                    html += `<span class="visual-cue" onclick="sendVisualCue('${cueText}')" title="Click to send: ${cueText}">${cueIcon}</span>`;
                 });
                 html += '</div>';
             }
+            
+            html += '</div>';
             
             messageDiv.innerHTML = html;
             chatMessages.appendChild(messageDiv);
@@ -597,9 +966,55 @@
                 'comfort_hug': '🤗',
                 'practice_icon': '💪',
                 'listening': '👂',
-                'musical_note': '🎵'
+                'musical_note': '🎵',
+                'rainbow': '🌈',
+                'sparkles': '✨',
+                'magic_wand': '🪄',
+                'calendar': '📅',
+                'clock': '🕐',
+                'checkmark': '✅',
+                'trophy': '🏆',
+                'celebration': '🎉',
+                'lightbulb': '💡',
+                'question': '❓',
+                'thinking': '🤔',
+                'calm': '😌',
+                'comfort': '🤗',
+                'adjusting': '🔧',
+                'helping_hand': '✋',
+                'patience': '⏳',
+                'step_by_step': '📋',
+                'friendly_wave': '👋',
+                'smile': '😊',
+                'play_icon': '🎮',
+                'book': '📚',
+                'art': '🎨',
+                'paintbrush': '🖌️',
+                'speaker': '🔊',
+                'peaceful': '☮️',
+                'grateful': '🙏',
+                'polite': '🎩',
+                'encouragement': '💪',
+                'partnership': '🤝',
+                'support': '🛟'
             };
-            return icons[cue] || cue;
+            
+            // Return the icon if found, otherwise return the cue as text with a default emoji
+            return icons[cue] || `✨ ${cue}`;
+        }
+
+        function sendVisualCue(cueText) {
+            // Set the message input to the visual cue and send it
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value = cueText;
+            sendMessage();
+        }
+
+        function sendQuickMessage(message) {
+            // Send a quick predefined message
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value = message;
+            sendMessage();
         }
 
         // Allow Enter key to send message
@@ -609,8 +1024,15 @@
             }
         });
 
-        async function startRoutine(routineId) {
+        async function startRoutineWithMCP(routineId, routineName) {
             try {
+                // Check if there's already an active session for this routine
+                if (activeRoutineSessions[routineId]) {
+                    addMessageToChat(`You're already working on your ${routineName}! Keep going! 💪`, 'ai');
+                    return;
+                }
+                
+                // Directly call the API endpoint without going through chat
                 const formData = new FormData();
                 formData.append('routine_id', routineId);
                 formData.append('child_id', childId);
@@ -623,25 +1045,138 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    alert('Routine started! Let\'s begin with the first activity.');
-                    // Could redirect to a routine session page
+                    // Track this active session
+                    activeRoutineSessions[routineId] = {
+                        routineId: routineId,
+                        routineName: routineName,
+                        startedAt: new Date(),
+                        progress: 0,
+                        currentActivity: 0
+                    };
+                    
+                    // Update the routine UI to show progress
+                    updateRoutineProgress(routineId, 0, 'Started! Let\'s begin! 🌟');
+                    
+                    // Add a success message to chat
+                    addMessageToChat(`Great! I've started your ${routineName}. Let's do this together! 💪`, 'ai');
                 } else {
-                    alert('Error starting routine: ' + result.error);
+                    addMessageToChat(`I had trouble starting your routine. Let's try again! 🤗`, 'ai');
                 }
             } catch (error) {
                 console.error('Error starting routine:', error);
-                alert('Error starting routine. Please try again.');
+                addMessageToChat('Oops! Something went wrong. Can you try asking me to start your routine? 😊', 'ai');
             }
         }
 
+        async function createRoutineWithMCP() {
+            // Guide the user to create a routine using natural language
+            const suggestions = [
+                "I want to create a morning routine",
+                "Can you help me make a bedtime routine?",
+                "I need a routine for my homework time",
+                "Create a calm-down routine for me"
+            ];
+            
+            const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+            
+            // Add a helpful message to the chat
+            addMessageToChat(
+                `I'd love to help you create a new routine! 🎨✨\n\n` +
+                `Just tell me what kind of routine you want. For example, you could say:\n` +
+                `"${randomSuggestion}"\n\n` +
+                `Type your message below and I'll help you create it step by step! 🌟`,
+                'ai'
+            );
+            
+            // Focus on the chat input
+            document.getElementById('messageInput').focus();
+            document.getElementById('messageInput').placeholder = 'Tell me what routine you want to create...';
+        }
+
+        function showRoutineDetails(routineId) {
+            // Send a message to get routine details through MCP
+            sendMessageToChat(`Tell me about routine ${routineId}`);
+        }
+
+        async function completeActivity(routineId, activityName) {
+            try {
+                if (!activeRoutineSessions[routineId]) {
+                    addMessageToChat('Please start your routine first! 😊', 'ai');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('routine_id', routineId);
+                formData.append('activity_name', activityName);
+                formData.append('child_id', childId);
+                
+                const response = await fetch(`/api/routine/${routineId}/complete-activity`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Update session progress
+                    const session = activeRoutineSessions[routineId];
+                    session.currentActivity++;
+                    session.progress = (session.currentActivity / result.totalActivities) * 100;
+                    
+                    // Update UI
+                    updateRoutineProgress(routineId, session.progress, `Great job on ${activityName}! 🌟`);
+                    
+                    // Add celebration message
+                    addMessageToChat(`Wonderful! You completed "${activityName}"! 🎉`, 'ai');
+                    
+                    // Check if routine is complete
+                    if (session.progress >= 100) {
+                        delete activeRoutineSessions[routineId];
+                        addMessageToChat(`Amazing! You completed your entire ${session.routineName} routine! 🌈✨`, 'ai');
+                    }
+                } else {
+                    addMessageToChat(`I couldn't mark that activity as complete. Let's try again! 😊`, 'ai');
+                }
+            } catch (error) {
+                console.error('Error completing activity:', error);
+                addMessageToChat('Oops! Something went wrong. Keep going, you\'re doing great! 💪', 'ai');
+            }
+        }
+
+        function updateRoutineProgress(routineId, progressPercent, statusText) {
+            const progressElement = document.getElementById(`progress-${routineId}`);
+            if (progressElement) {
+                progressElement.style.display = 'block';
+                const progressBar = progressElement.querySelector('.progress-fill');
+                const progressText = progressElement.querySelector('.progress-text');
+                
+                if (progressBar) progressBar.style.width = `${progressPercent}%`;
+                if (progressText) progressText.textContent = statusText;
+            }
+        }
+
+        async function sendMessageToChat(message) {
+            // Add the message to chat input and send it
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value = message;
+            await sendMessage();
+        }
+
+        // Legacy function for backward compatibility
+        async function startRoutine(routineId) {
+            const routine = document.querySelector(`#routine-${routineId} h4`);
+            const routineName = routine ? routine.textContent : 'routine';
+            await startRoutineWithMCP(routineId, routineName);
+        }
+
         function openCreateRoutineModal() {
-            // This would open a modal for creating new routines
-            alert('Create routine feature coming soon!');
+            // Redirect to new MCP-powered creation
+            createRoutineWithMCP();
         }
 
         function viewDetailedProgress() {
-            // This would open a detailed progress view
-            window.open(`/api/progress/${childId}`, '_blank');
+            // Open the detailed progress report page
+            window.open(`/progress/${childId}`, '_blank');
         }
     </script>
 </body>

@@ -685,3 +685,261 @@ class ProgressTracker:
             "advanced": "2-4 months"
         }
         return timelines.get(difficulty, "4-8 weeks")
+
+    async def get_child_milestones(self, child_id: int) -> List[Dict[str, Any]]:
+        """Get all milestones for a child."""
+        try:
+            query = """
+                SELECT id, child_id, category, description, achieved, achieved_date, target_date
+                FROM milestones 
+                WHERE child_id = ?
+                ORDER BY achieved DESC, target_date ASC
+            """
+            
+            milestones = await self.db_manager.fetch_all(query, (child_id,))
+            
+            result = []
+            for milestone in milestones:
+                milestone_dict = dict(milestone)
+                # Convert date strings to datetime objects if needed
+                if milestone_dict['achieved_date']:
+                    milestone_dict['achieved_date'] = datetime.fromisoformat(milestone_dict['achieved_date'])
+                if milestone_dict['target_date']:
+                    milestone_dict['target_date'] = datetime.fromisoformat(milestone_dict['target_date'])
+                result.append(milestone_dict)
+            
+            # If no milestones exist, create some default ones
+            if not result:
+                await self._create_default_milestones(child_id)
+                return await self.get_child_milestones(child_id)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting milestones for child {child_id}: {str(e)}")
+            return []
+
+    async def get_recent_interactions(self, child_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get recent interactions for a child."""
+        try:
+            query = """
+                SELECT id, child_id, interaction_type, content, response, success, 
+                       duration_seconds, emotion_detected, timestamp
+                FROM interactions 
+                WHERE child_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """
+            
+            interactions = await self.db_manager.fetch_all(query, (child_id, limit))
+            
+            result = []
+            for interaction in interactions:
+                interaction_dict = dict(interaction)
+                # Convert timestamp string to datetime object if needed
+                if isinstance(interaction_dict['timestamp'], str):
+                    interaction_dict['timestamp'] = datetime.fromisoformat(interaction_dict['timestamp'])
+                result.append(interaction_dict)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting recent interactions for child {child_id}: {str(e)}")
+            return []
+
+    async def get_child_statistics(self, child_id: int) -> Dict[str, Any]:
+        """Get statistics for a child."""
+        try:
+            # Get basic interaction counts
+            total_messages_query = """
+                SELECT COUNT(*) as count FROM interactions 
+                WHERE child_id = ? AND interaction_type = 'chat'
+            """
+            total_messages = await self.db_manager.fetch_one(total_messages_query, (child_id,))
+            
+            successful_communications_query = """
+                SELECT COUNT(*) as count FROM interactions 
+                WHERE child_id = ? AND interaction_type = 'chat' AND success = 1
+            """
+            successful_communications = await self.db_manager.fetch_one(successful_communications_query, (child_id,))
+            
+            # Get routine statistics
+            routines_started_query = """
+                SELECT COUNT(DISTINCT routine_id) as count FROM routine_sessions 
+                WHERE child_id = ?
+            """
+            routines_started = await self.db_manager.fetch_one(routines_started_query, (child_id,))
+            
+            routines_completed_query = """
+                SELECT COUNT(*) as count FROM routine_sessions 
+                WHERE child_id = ? AND status = 'completed'
+            """
+            routines_completed = await self.db_manager.fetch_one(routines_completed_query, (child_id,))
+            
+            # Get learning statistics
+            learning_sessions_query = """
+                SELECT COUNT(*) as count FROM interactions 
+                WHERE child_id = ? AND interaction_type = 'learning'
+            """
+            learning_sessions = await self.db_manager.fetch_one(learning_sessions_query, (child_id,))
+            
+            return {
+                "total_messages": total_messages['count'] if total_messages else 0,
+                "successful_communications": successful_communications['count'] if successful_communications else 0,
+                "routines_started": routines_started['count'] if routines_started else 0,
+                "routines_completed": routines_completed['count'] if routines_completed else 0,
+                "learning_sessions": learning_sessions['count'] if learning_sessions else 0,
+                "skills_practiced": learning_sessions['count'] if learning_sessions else 0  # Placeholder
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting statistics for child {child_id}: {str(e)}")
+            return {
+                "total_messages": 0,
+                "successful_communications": 0,
+                "routines_started": 0,
+                "routines_completed": 0,
+                "learning_sessions": 0,
+                "skills_practiced": 0
+            }
+
+    async def generate_insights(self, child_id: int) -> List[Dict[str, str]]:
+        """Generate AI insights for a child's progress."""
+        try:
+            # Get recent progress data
+            progress = await self.get_child_progress(child_id)
+            interactions = await self.get_recent_interactions(child_id, limit=20)
+            milestones = await self.get_child_milestones(child_id)
+            
+            insights = []
+            
+            # Communication insights
+            if progress['communication_score'] >= 80:
+                insights.append({
+                    "type": "Communication Success",
+                    "text": f"Excellent communication progress! {child_id}'s communication skills are developing wonderfully. Keep encouraging expressive interactions! 🌟"
+                })
+            elif progress['communication_score'] >= 60:
+                insights.append({
+                    "type": "Communication Growth",
+                    "text": f"Good communication development! Focus on expanding vocabulary and encouraging longer interactions for continued growth. 📈"
+                })
+            else:
+                insights.append({
+                    "type": "Communication Support",
+                    "text": f"Let's focus on building communication confidence! Try using more visual cues and positive reinforcement during interactions. 💪"
+                })
+            
+            # Routine insights
+            if progress['routine_adherence'] >= 80:
+                insights.append({
+                    "type": "Routine Excellence",
+                    "text": f"Amazing routine adherence! Consistent routines are building great habits and structure. Consider adding new routine challenges! 🏆"
+                })
+            elif progress['routine_adherence'] >= 60:
+                insights.append({
+                    "type": "Routine Building",
+                    "text": f"Solid routine progress! Try breaking down complex routines into smaller, achievable steps for better success rates. 📅"
+                })
+            else:
+                insights.append({
+                    "type": "Routine Support",
+                    "text": f"Routines take time to build! Focus on one simple routine at a time and celebrate small victories along the way. 🌈"
+                })
+            
+            # Learning insights
+            if progress['learning_engagement'] >= 80:
+                insights.append({
+                    "type": "Learning Champion",
+                    "text": f"Outstanding learning engagement! This curiosity and engagement will lead to amazing growth. Explore new learning topics! 🎓"
+                })
+            elif progress['learning_engagement'] >= 60:
+                insights.append({
+                    "type": "Learning Progress",
+                    "text": f"Great learning momentum! Try incorporating more interactive and hands-on learning activities for enhanced engagement. ✨"
+                })
+            else:
+                insights.append({
+                    "type": "Learning Encouragement",
+                    "text": f"Every learner has their own pace! Find topics that spark natural interest and build learning confidence gradually. 💡"
+                })
+            
+            # Milestone insights
+            achieved_milestones = len([m for m in milestones if m['achieved']])
+            total_milestones = len(milestones)
+            
+            if achieved_milestones > 0:
+                insights.append({
+                    "type": "Milestone Achievement",
+                    "text": f"Wonderful progress with {achieved_milestones} milestones achieved! Each milestone represents real growth and development. 🎉"
+                })
+            
+            # Recent activity insights
+            if len(interactions) > 0:
+                recent_success_rate = len([i for i in interactions if i['success']]) / len(interactions)
+                if recent_success_rate >= 0.8:
+                    insights.append({
+                        "type": "Recent Success",
+                        "text": f"Recent interactions show excellent success patterns! This consistency is building strong communication confidence. 🌟"
+                    })
+            
+            return insights
+            
+        except Exception as e:
+            logger.error(f"Error generating insights for child {child_id}: {str(e)}")
+            return [{
+                "type": "Welcome",
+                "text": "Welcome to Rainbow Bridge! Start interacting to see personalized insights about your progress journey. 🌈"
+            }]
+
+    async def _create_default_milestones(self, child_id: int):
+        """Create default milestones for a new child."""
+        default_milestones = [
+            {
+                "category": "communication",
+                "description": "First successful interaction with Rainbow Bridge",
+                "achieved": False,
+                "target_date": datetime.now() + timedelta(days=7)
+            },
+            {
+                "category": "communication", 
+                "description": "Send 10 messages using visual cues",
+                "achieved": False,
+                "target_date": datetime.now() + timedelta(days=14)
+            },
+            {
+                "category": "routine",
+                "description": "Complete first routine activity",
+                "achieved": False,
+                "target_date": datetime.now() + timedelta(days=7)
+            },
+            {
+                "category": "routine",
+                "description": "Complete a full routine session",
+                "achieved": False,
+                "target_date": datetime.now() + timedelta(days=21)
+            },
+            {
+                "category": "social",
+                "description": "Use positive social expressions (please, thank you)",
+                "achieved": False,
+                "target_date": datetime.now() + timedelta(days=14)
+            },
+            {
+                "category": "learning",
+                "description": "Engage in learning conversation with AI",
+                "achieved": False,
+                "target_date": datetime.now() + timedelta(days=10)
+            }
+        ]
+        
+        for milestone in default_milestones:
+            query = """
+                INSERT INTO milestones (child_id, category, description, achieved, target_date)
+                VALUES (?, ?, ?, ?, ?)
+            """
+            await self.db_manager.execute_query(
+                query, 
+                (child_id, milestone['category'], milestone['description'], 
+                 milestone['achieved'], milestone['target_date'].isoformat())
+            )

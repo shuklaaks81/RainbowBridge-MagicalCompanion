@@ -27,10 +27,12 @@ A revolutionary, magical AI companion specially crafted for special needs childr
 ## Technology Stack
 
 - **Backend**: Python, FastAPI, SQLite
-- **AI Integration**: OpenAI GPT-4 API
+- **AI Integration**: Azure OpenAI (GPT-3.5-turbo-instruct) with local LLM fallback
+- **MCP Architecture**: Model Context Protocol for extensible tool integration
 - **Frontend**: HTML, CSS, JavaScript (Vanilla)
-- **Database**: SQLite with async support
+- **Database**: SQLite with async support (aiosqlite)
 - **Image Processing**: PIL (Pillow) for custom visual cards
+- **Protocol**: WebSocket support for real-time interactions
 
 ## 🚀 **Quick Start Your Magical Journey**
 
@@ -93,10 +95,27 @@ The application will be available at `http://localhost:8000`
 - **Visual Communication**: Select visual cards to communicate
 - **Audio Support**: Record audio messages (coming soon)
 
-#### Routine Management
-- **Create Routines**: Set up daily routines with visual activities
-- **Schedule Routines**: Set specific times for routine reminders
-- **Track Progress**: Monitor routine completion and adherence
+#### Routine Management 🎨
+- **Natural Language Routine Creation**: Simply ask "Create a morning routine" in chat
+- **Smart Routine Suggestions**: AI-powered activity recommendations based on time and mood
+- **Interactive Routine Sessions**: Start routines through chat with step-by-step guidance
+- **Progress Tracking**: Real-time activity completion with encouraging feedback
+- **MCP Integration**: Advanced Model Context Protocol for seamless chat-based routine management
+
+**Example Interactions:**
+```
+Child: "I want to create a bedtime routine"
+AI: 🌈 Wonderful! I'll help you create a colorful bedtime routine! ✨
+
+Child: "What routines do I have?"
+AI: 🌈 Here are all your wonderful routines! ✨
+
+Child: "Start my morning routine"
+AI: 🌈 Let's start your 'Morning Routine'! This is going to be wonderful! ✨
+
+Child: "I finished brushing teeth"
+AI: 🎉 Amazing job! You're doing wonderful! What's next is getting dressed! ✨
+```
 
 #### Progress Tracking
 - **Real-time Monitoring**: Track communication improvements
@@ -141,6 +160,31 @@ The AI assistant is configured with specific prompts optimized for autism spectr
 - **Routines**: Manages daily routines and activities
 - **Milestones**: Tracks developmental milestones
 - **Progress**: Historical progress data
+
+## 🛠️ MCP Architecture & Extensibility
+
+Rainbow Bridge uses the **Model Context Protocol (MCP)** for seamless integration of AI tools and capabilities:
+
+### MCP Server Components
+- **Routine Management Server**: Handles all routine-related operations through natural language
+- **Tool Registry**: Extensible architecture for adding new capabilities
+- **Intent Detection**: Smart pattern matching for user requests
+- **Child-Friendly Responses**: Consistent, encouraging communication style
+
+### Available MCP Tools
+1. **create_routine**: Natural language routine creation
+2. **get_child_routines**: Retrieve and display user routines  
+3. **start_routine**: Begin routine sessions with guidance
+4. **complete_activity**: Track progress and show next steps
+5. **get_routine_suggestions**: AI-powered activity recommendations
+6. **update_routine**: Modify existing routine parameters
+
+### Extensibility
+The MCP architecture makes it easy to add new features:
+- Create new MCP servers for different domains (learning, social skills, etc.)
+- Add new tools to existing servers
+- Integrate with external services and APIs
+- Maintain consistent child-friendly interaction patterns
 
 ## Contributing
 

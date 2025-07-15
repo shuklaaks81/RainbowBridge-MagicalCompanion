@@ -220,8 +220,8 @@ class RoutineManager:
         try:
             routines = await self.db_manager.get_routines_by_child(child_id)
             
-            # Convert to dictionaries for JSON serialization
-            return [self._routine_to_dict(routine) for routine in routines]
+            # Routines are already dictionaries from the database
+            return routines
         
         except Exception as e:
             logger.error(f"Failed to get routines for child {child_id}: {str(e)}")
@@ -234,96 +234,182 @@ class RoutineManager:
             routine_dict["created_at"] = routine_dict["created_at"].isoformat()
         return routine_dict
     
-    async def start_routine(self, routine_id: int, child_id: int) -> Dict[str, Any]:
-        """Start a routine session for a child."""
+    async def get_routine(self, routine_id: int) -> Optional[Routine]:
+        """Get a specific routine by ID."""
         try:
-            routine = await self.db_manager.get_routine(routine_id)
-            if not routine or routine.child_id != child_id:
-                raise ValueError("Routine not found or not accessible")
+            routine_data = await self.db_manager.get_routine(routine_id)
+            if routine_data:
+                return self._dict_to_routine(routine_data)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get routine {routine_id}: {str(e)}")
+            return None
+    
+    async def start_routine(self, routine_id: int) -> bool:
+        """Start a routine session."""
+        try:
+            logger.info(f"🔄 Starting routine {routine_id}...")
+            routine = await self.get_routine(routine_id)
+            if not routine:
+                logger.error(f"❌ Routine {routine_id} not found")
+                return False
             
-            # Reset activity completion status
-            for activity in routine.activities:
-                activity.completed = False
+            logger.info(f"✅ Found routine: {routine.name}")
             
-            # Create a routine session
+            # Check for existing active sessions for this child and routine
+            try:
+                existing_session = await self._get_active_session(routine.child_id, routine_id)
+                if existing_session:
+                    logger.info(f"📋 Resuming existing session {existing_session['id']} for routine {routine_id}")
+                    return True
+            except Exception as e:
+                logger.warning(f"Could not check for existing sessions: {str(e)}")
+            
+            # Create a new routine session
+            logger.info(f"🔄 Creating session for child {routine.child_id}...")
+            
+            # Get activities count safely
+            activities_count = 0
+            if hasattr(routine, 'activities') and routine.activities:
+                if isinstance(routine.activities, list):
+                    activities_count = len(routine.activities)
+                else:
+                    logger.warning(f"Routine activities is not a list: {type(routine.activities)}")
+            
             session_data = {
                 "routine_id": routine_id,
-                "child_id": child_id,
+                "child_id": routine.child_id,
                 "started_at": datetime.now(),
                 "current_activity": 0,
-                "total_activities": len(routine.activities),
-                "status": "in_progress"
+                "total_activities": activities_count,
+                "status": "in_progress",
+                "progress": 0.0
             }
             
+            logger.info(f"Session data: {session_data}")
             session_id = await self.db_manager.create_routine_session(session_data)
+            logger.info(f"✅ Started routine session {session_id} for routine {routine_id}")
+            return True
             
-            # Return the first activity
-            first_activity = routine.activities[0] if routine.activities else None
-            
-            return {
-                "session_id": session_id,
-                "routine": self._routine_to_dict(routine),
-                "current_activity": asdict(first_activity) if first_activity else None,
-                "progress": 0
-            }
-        
         except Exception as e:
-            logger.error(f"Failed to start routine: {str(e)}")
-            raise
+            logger.error(f"❌ Failed to start routine {routine_id}: {str(e)}")
+            return False
     
-    async def complete_activity(
-        self,
-        session_id: int,
-        activity_index: int,
-        child_id: int
-    ) -> Dict[str, Any]:
-        """Mark an activity as completed and move to the next one."""
+    async def complete_activity(self, routine_id: int, activity_name: str) -> bool:
+        """Mark an activity as completed in a routine."""
         try:
-            session = await self.db_manager.get_routine_session(session_id)
-            if not session or session["child_id"] != child_id:
-                raise ValueError("Session not found or not accessible")
+            routine = await self.get_routine(routine_id)
+            if not routine:
+                return False
             
-            routine = await self.db_manager.get_routine(session["routine_id"])
+            # Find the activity index with fuzzy matching
+            activity_index = None
+            activity_name_lower = activity_name.lower()
             
-            # Mark current activity as completed
-            if activity_index < len(routine.activities):
-                routine.activities[activity_index].completed = True
+            # First try exact match
+            for i, activity in enumerate(routine.activities):
+                if activity.name.lower() == activity_name_lower:
+                    activity_index = i
+                    break
             
-            # Calculate progress
-            completed_activities = sum(1 for activity in routine.activities if activity.completed)
-            total_activities = len(routine.activities)
-            progress = (completed_activities / total_activities) * 100
+            # If no exact match, try partial matching
+            if activity_index is None:
+                for i, activity in enumerate(routine.activities):
+                    activity_lower = activity.name.lower()
+                    # Check if activity name contains the input or vice versa
+                    if (activity_name_lower in activity_lower or 
+                        activity_lower in activity_name_lower or
+                        self._fuzzy_match_activity(activity_name_lower, activity_lower)):
+                        activity_index = i
+                        logger.info(f"🔍 Fuzzy matched '{activity_name}' to '{activity.name}'")
+                        break
             
-            # Get next activity
-            next_index = activity_index + 1
-            next_activity = None
-            if next_index < len(routine.activities):
-                next_activity = routine.activities[next_index]
+            if activity_index is None:
+                logger.warning(f"Activity '{activity_name}' not found in routine {routine_id}")
+                # List available activities for debugging
+                available_activities = [a.name for a in routine.activities]
+                logger.info(f"Available activities: {available_activities}")
+                return False
             
-            # Update session
-            await self.db_manager.update_routine_session(session_id, {
-                "current_activity": next_index,
-                "progress": progress,
-                "status": "completed" if progress == 100 else "in_progress"
-            })
+            # Mark as completed
+            routine.activities[activity_index].completed = True
             
-            # Log the completed activity
+            # Update in database
+            await self.db_manager.update_routine_activity_status(
+                routine_id, activity_index, True
+            )
+            
+            # Log the completion
             await self.db_manager.log_activity_completion(
-                child_id=child_id,
-                activity_name=routine.activities[activity_index].name,
+                child_id=routine.child_id,
+                activity_name=activity_name,
+                routine_id=routine_id,
                 completed_at=datetime.now()
             )
             
-            return {
-                "progress": progress,
-                "completed": progress == 100,
-                "next_activity": asdict(next_activity) if next_activity else None,
-                "celebration_message": self._get_celebration_message(progress)
-            }
-        
+            logger.info(f"Completed activity {activity_name} in routine {routine_id}")
+            return True
+            
         except Exception as e:
-            logger.error(f"Failed to complete activity: {str(e)}")
-            raise
+            logger.error(f"Failed to complete activity {activity_name}: {str(e)}")
+            return False
+    
+    async def update_routine(self, routine_id: int, updates: Dict[str, Any]) -> bool:
+        """Update an existing routine."""
+        try:
+            routine = await self.get_routine(routine_id)
+            if not routine:
+                return False
+            
+            # Apply updates
+            if "name" in updates:
+                routine.name = updates["name"]
+            if "schedule_time" in updates:
+                routine.schedule_time = updates["schedule_time"]
+            if "days_of_week" in updates:
+                routine.days_of_week = updates["days_of_week"]
+            if "active" in updates:
+                routine.active = updates["active"]
+            
+            # Update in database
+            await self.db_manager.update_routine(routine_id, asdict(routine))
+            
+            logger.info(f"Updated routine {routine_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update routine {routine_id}: {str(e)}")
+            return False
+    
+    def _dict_to_routine(self, routine_data: Dict) -> Routine:
+        """Convert dictionary data to Routine object."""
+        activities_data = routine_data.get("activities", [])
+        activities = []
+        
+        for activity_data in activities_data:
+            if isinstance(activity_data, dict):
+                activities.append(Activity(**activity_data))
+            else:
+                # Handle string activity names
+                activities.append(Activity(
+                    name=str(activity_data),
+                    duration_minutes=15,
+                    description=f"Activity: {activity_data}",
+                    visual_cue="activity",
+                    instructions=[f"Complete {activity_data}"],
+                    sensory_considerations=[]
+                ))
+        
+        return Routine(
+            id=routine_data.get("id"),
+            child_id=routine_data["child_id"],
+            name=routine_data["name"],
+            activities=activities,
+            schedule_time=routine_data["schedule_time"],
+            days_of_week=routine_data.get("days_of_week", []),
+            active=routine_data.get("active", True),
+            created_at=routine_data.get("created_at")
+        )
     
     def _get_celebration_message(self, progress: float) -> str:
         """Get an appropriate celebration message based on progress."""
@@ -399,3 +485,63 @@ class RoutineManager:
         except Exception as e:
             logger.error(f"Failed to get routine suggestions: {str(e)}")
             return []
+    
+    async def _get_active_session(self, child_id: int, routine_id: int) -> Optional[Dict]:
+        """Get active session for a specific child and routine."""
+        try:
+            # Use raw SQL query to check for active sessions
+            import aiosqlite
+            async with aiosqlite.connect(self.db_manager.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("""
+                    SELECT * FROM routine_sessions 
+                    WHERE child_id = ? AND routine_id = ? AND status = 'in_progress'
+                    ORDER BY started_at DESC LIMIT 1
+                """, (child_id, routine_id))
+                
+                row = await cursor.fetchone()
+                if row:
+                    return dict(row)
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get active session: {str(e)}")
+            return None
+    
+    def _fuzzy_match_activity(self, input_name: str, activity_name: str) -> bool:
+        """Fuzzy match activity names to handle variations."""
+        # Define common activity mappings
+        activity_mappings = {
+            "teeth": ["brush teeth", "brushing teeth", "dental care"],
+            "brush": ["brush teeth", "brushing teeth", "dental care"],
+            "breakfast": ["eat breakfast", "morning meal", "morning snack"],
+            "lunch": ["eat lunch", "midday meal", "afternoon meal"],
+            "dinner": ["eat dinner", "evening meal", "supper"],
+            "shower": ["take shower", "showering", "bathing"],
+            "bath": ["take bath", "bathing", "showering"],
+            "homework": ["do homework", "study", "schoolwork"],
+            "play": ["playtime", "free play", "playing"],
+            "exercise": ["physical activity", "workout", "movement"],
+            "medicine": ["medication", "take medicine", "pills"],
+            "vitamin": ["vitamins", "supplements", "take vitamins"]
+        }
+        
+        # Check if input matches any mapped activities
+        for key, variations in activity_mappings.items():
+            if key in input_name:
+                if any(var.lower() in activity_name.lower() for var in variations):
+                    return True
+            if key in activity_name:
+                if any(var.lower() in input_name.lower() for var in variations):
+                    return True
+        
+        # Check for word overlap (at least 50% common words)
+        input_words = set(input_name.split())
+        activity_words = set(activity_name.split())
+        
+        if len(input_words) > 0 and len(activity_words) > 0:
+            common_words = input_words.intersection(activity_words)
+            overlap_ratio = len(common_words) / min(len(input_words), len(activity_words))
+            return overlap_ratio >= 0.5
+        
+        return False

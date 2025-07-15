@@ -1,0 +1,37 @@
+<!-- Rainbow Bridge AI Assistant Avatar -->
+<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bridgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e91e63"/>
+      <stop offset="16%" style="stop-color:#f44336"/>
+      <stop offset="32%" style="stop-color:#ff9800"/>
+      <stop offset="48%" style="stop-color:#ffeb3b"/>
+      <stop offset="64%" style="stop-color:#4caf50"/>
+      <stop offset="80%" style="stop-color:#2196f3"/>
+      <stop offset="100%" style="stop-color:#9c27b0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/> 
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="30" cy="30" r="28" fill="url(#bridgeGrad)" stroke="#fff" stroke-width="2" filter="url(#glow)"/>
+  <!-- Rainbow Bridge Bridge Shape -->
+  <path d="M 10 40 Q 30 25 50 40" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 12 38 Q 30 28 48 38" stroke="rgba(255,255,255,0.7)" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Sparkle eyes -->
+  <circle cx="22" cy="24" r="2" fill="#fff"/>
+  <circle cx="38" cy="24" r="2" fill="#fff"/>
+  <polygon points="22,20 23,22 25,22 23.5,23.5 24,26 22,24.5 20,26 20.5,23.5 19,22 21,22" fill="#fff"/>
+  <polygon points="38,20 39,22 41,22 39.5,23.5 40,26 38,24.5 36,26 36.5,23.5 35,22 37,22" fill="#fff"/>
+  <!-- Magical smile -->
+  <path d="M 20 35 Q 30 42 40 35" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- Magic sparkles -->
+  <circle cx="15" cy="15" r="1" fill="#fff" opacity="0.8"/>
+  <circle cx="45" cy="18" r="1" fill="#fff" opacity="0.8"/>
+  <circle cx="50" cy="35" r="1" fill="#fff" opacity="0.8"/>
+  <circle cx="8" cy="32" r="1" fill="#fff" opacity="0.8"/>
+</svg>

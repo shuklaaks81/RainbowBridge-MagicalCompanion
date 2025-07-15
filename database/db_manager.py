@@ -38,6 +38,7 @@ class DatabaseManager:
                         interests TEXT,  -- JSON array
                         special_needs TEXT,  -- JSON array
                         preferences TEXT,  -- JSON object
+                        profile_picture TEXT DEFAULT 'default.svg',  -- Profile picture filename
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -53,7 +54,9 @@ class DatabaseManager:
                         schedule_time TEXT NOT NULL,
                         days_of_week TEXT NOT NULL,  -- JSON array
                         active BOOLEAN DEFAULT TRUE,
+                        total_activities INTEGER DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (child_id) REFERENCES children (id)
                     )
                 """)
@@ -120,6 +123,21 @@ class DatabaseManager:
                     )
                 """)
                 
+                # Activity logs table (for detailed activity tracking)
+                await db.execute("""
+                    CREATE TABLE IF NOT EXISTS activity_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        child_id INTEGER NOT NULL,
+                        routine_id INTEGER,
+                        activity_name TEXT NOT NULL,
+                        action TEXT NOT NULL,  -- started, completed, skipped
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        notes TEXT,
+                        FOREIGN KEY (child_id) REFERENCES children (id),
+                        FOREIGN KEY (routine_id) REFERENCES routines (id)
+                    )
+                """)
+                
                 # Progress snapshots table (for historical tracking)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS progress_snapshots (
@@ -137,6 +155,18 @@ class DatabaseManager:
                 """)
                 
                 await db.commit()
+                
+                # Add profile_picture column if it doesn't exist (migration)
+                try:
+                    await db.execute("""
+                        ALTER TABLE children ADD COLUMN profile_picture TEXT DEFAULT 'default.svg'
+                    """)
+                    await db.commit()
+                    logger.info("Added profile_picture column to children table")
+                except Exception:
+                    # Column already exists, ignore
+                    pass
+                
                 logger.info("Database initialized successfully")
         
         except Exception as e:
@@ -168,6 +198,41 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to create child: {str(e)}")
             raise
+
+    async def fetch_all(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
+        """Execute a query and return all results as a list of dictionaries."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute(query, params)
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to fetch all rows: {str(e)}")
+            return []
+
+    async def fetch_one(self, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
+        """Execute a query and return one result as a dictionary."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute(query, params)
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Failed to fetch one row: {str(e)}")
+            return None
+
+    async def execute_query(self, query: str, params: tuple = ()) -> bool:
+        """Execute a query and return success status."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(query, params)
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to execute query: {str(e)}")
+            return False
     
     async def get_child(self, child_id: int) -> Optional[Dict[str, Any]]:
         """Get a child's profile by ID."""
@@ -198,30 +263,31 @@ class DatabaseManager:
             async with aiosqlite.connect(self.db_path) as db:
                 # Convert activities to JSON
                 activities_json = json.dumps([asdict(activity) for activity in routine.activities])
+                days_json = json.dumps(routine.days_of_week)
                 
                 cursor = await db.execute("""
-                    INSERT INTO routines (child_id, name, activities, schedule_time, days_of_week, active)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO routines (
+                        child_id, name, activities, schedule_time, days_of_week, active, total_activities, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     routine.child_id,
                     routine.name,
                     activities_json,
                     routine.schedule_time,
-                    json.dumps(routine.days_of_week),
-                    routine.active
+                    days_json,
+                    routine.active,
+                    len(routine.activities),  # total_activities count
+                    routine.created_at or datetime.now()
                 ))
                 
-                routine_id = cursor.lastrowid
                 await db.commit()
+                return cursor.lastrowid
                 
-                logger.info(f"Saved routine: {routine.name} (ID: {routine_id})")
-                return routine_id
-        
         except Exception as e:
             logger.error(f"Failed to save routine: {str(e)}")
             raise
     
-    async def get_routine(self, routine_id: int) -> Optional[Routine]:
+    async def get_routine(self, routine_id: int) -> Optional[Dict]:
         """Get a routine by ID."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
@@ -232,96 +298,219 @@ class DatabaseManager:
                 
                 row = await cursor.fetchone()
                 if row:
-                    routine_data = dict(row)
-                    
-                    # Parse activities from JSON
-                    activities_data = json.loads(routine_data["activities"])
-                    activities = [Activity(**activity_data) for activity_data in activities_data]
-                    
-                    routine = Routine(
-                        id=routine_data["id"],
-                        child_id=routine_data["child_id"],
-                        name=routine_data["name"],
-                        activities=activities,
-                        schedule_time=routine_data["schedule_time"],
-                        days_of_week=json.loads(routine_data["days_of_week"]),
-                        active=routine_data["active"],
-                        created_at=datetime.fromisoformat(routine_data["created_at"]) if routine_data["created_at"] else None
-                    )
-                    
-                    return routine
+                    routine_dict = dict(row)
+                    # Parse JSON fields
+                    routine_dict["activities"] = json.loads(routine_dict["activities"])
+                    routine_dict["days_of_week"] = json.loads(routine_dict["days_of_week"])
+                    return routine_dict
                 
                 return None
-        
+                
         except Exception as e:
             logger.error(f"Failed to get routine {routine_id}: {str(e)}")
             return None
     
-    async def get_routines_by_child(self, child_id: int) -> List[Routine]:
-        """Get all routines for a child."""
+    async def get_routines_by_child(self, child_id: int) -> List[Dict]:
+        """Get all routines for a specific child."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 db.row_factory = aiosqlite.Row
                 cursor = await db.execute("""
-                    SELECT * FROM routines WHERE child_id = ? AND active = TRUE
-                    ORDER BY created_at DESC
+                    SELECT * FROM routines WHERE child_id = ? ORDER BY created_at DESC
                 """, (child_id,))
                 
                 rows = await cursor.fetchall()
                 routines = []
                 
                 for row in rows:
-                    routine_data = dict(row)
-                    
-                    # Parse activities from JSON
-                    activities_data = json.loads(routine_data["activities"])
-                    activities = [Activity(**activity_data) for activity_data in activities_data]
-                    
-                    routine = Routine(
-                        id=routine_data["id"],
-                        child_id=routine_data["child_id"],
-                        name=routine_data["name"],
-                        activities=activities,
-                        schedule_time=routine_data["schedule_time"],
-                        days_of_week=json.loads(routine_data["days_of_week"]),
-                        active=routine_data["active"],
-                        created_at=datetime.fromisoformat(routine_data["created_at"]) if routine_data["created_at"] else None
-                    )
-                    
-                    routines.append(routine)
+                    routine_dict = dict(row)
+                    # Parse JSON fields
+                    routine_dict["activities"] = json.loads(routine_dict["activities"])
+                    routine_dict["days_of_week"] = json.loads(routine_dict["days_of_week"])
+                    routines.append(routine_dict)
                 
                 return routines
-        
+                
         except Exception as e:
             logger.error(f"Failed to get routines for child {child_id}: {str(e)}")
             return []
     
-    async def save_interaction(self, interaction: Interaction) -> int:
-        """Save an interaction to the database."""
+    async def update_routine(self, routine_id: int, routine_data: Dict) -> bool:
+        """Update a routine in the database."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                # Convert activities to JSON if present
+                if "activities" in routine_data:
+                    routine_data["activities"] = json.dumps(routine_data["activities"])
+                if "days_of_week" in routine_data:
+                    routine_data["days_of_week"] = json.dumps(routine_data["days_of_week"])
+                
+                # Build dynamic update query
+                fields = ", ".join([f"{key} = ?" for key in routine_data.keys()])
+                values = list(routine_data.values()) + [routine_id]
+                
+                await db.execute(f"""
+                    UPDATE routines SET {fields}, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, values)
+                
+                await db.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to update routine {routine_id}: {str(e)}")
+            return False
+    
+    async def create_routine_session(self, session_data: Dict) -> int:
+        """Create a new routine session."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 cursor = await db.execute("""
-                    INSERT INTO interactions (child_id, interaction_type, content, response, success, duration_seconds, emotion_detected, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO routine_sessions (
+                        routine_id, child_id, started_at, current_activity, total_activities, status, progress
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    interaction.child_id,
-                    interaction.interaction_type,
-                    interaction.content,
-                    interaction.response,
-                    interaction.success,
-                    interaction.duration_seconds,
-                    interaction.emotion_detected,
-                    interaction.timestamp.isoformat()
+                    session_data["routine_id"],
+                    session_data["child_id"],
+                    session_data["started_at"],
+                    session_data["current_activity"],
+                    session_data["total_activities"],
+                    session_data["status"],
+                    session_data["progress"]
                 ))
                 
-                interaction_id = cursor.lastrowid
                 await db.commit()
+                return cursor.lastrowid
                 
-                return interaction_id
-        
         except Exception as e:
-            logger.error(f"Failed to save interaction: {str(e)}")
+            logger.error(f"Failed to create routine session: {str(e)}")
             raise
+    
+    async def update_routine_session(self, session_id: int, updates: Dict) -> bool:
+        """Update a routine session."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                # Build dynamic update query
+                fields = ", ".join([f"{key} = ?" for key in updates.keys()])
+                values = list(updates.values()) + [session_id]
+                
+                await db.execute(f"""
+                    UPDATE routine_sessions SET {fields}
+                    WHERE id = ?
+                """, values)
+                
+                await db.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to update routine session {session_id}: {str(e)}")
+            return False
+    
+    async def get_active_routine_sessions(self, child_id: int) -> List[Dict]:
+        """Get active routine sessions for a child."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute("""
+                    SELECT rs.*, r.name as routine_name
+                    FROM routine_sessions rs
+                    JOIN routines r ON rs.routine_id = r.id
+                    WHERE rs.child_id = ? AND rs.completed_at IS NULL
+                    ORDER BY rs.started_at DESC
+                """, (child_id,))
+                
+                rows = await cursor.fetchall()
+                sessions = []
+                
+                for row in rows:
+                    sessions.append({
+                        "id": row[0],
+                        "routine_id": row[1],
+                        "child_id": row[2],
+                        "started_at": row[3],
+                        "completed_at": row[4],
+                        "current_activity": row[5],
+                        "total_activities": row[6],
+                        "status": row[7],
+                        "progress": row[8],
+                        "routine_name": row[9]
+                    })
+                
+                return sessions
+                
+        except Exception as e:
+            logger.error(f"Failed to get active routine sessions for child {child_id}: {str(e)}")
+            return []
+
+    async def get_routine_activities(self, routine_id: int) -> List[Dict]:
+        """Get activities for a specific routine."""
+        try:
+            routine_data = await self.get_routine(routine_id)
+            if routine_data and "activities" in routine_data:
+                return routine_data["activities"]
+            return []
+        except Exception as e:
+            logger.error(f"Failed to get activities for routine {routine_id}: {str(e)}")
+            return []
+
+    async def get_child_routines(self, child_id: int) -> List[Dict]:
+        """Get all routines for a child (alias for get_routines_by_child)."""
+        return await self.get_routines_by_child(child_id)
+
+    async def update_routine_activity_status(self, routine_id: int, activity_index: int, completed: bool) -> bool:
+        """Update the completion status of an activity in a routine."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                # Get current routine
+                cursor = await db.execute("""
+                    SELECT activities FROM routines WHERE id = ?
+                """, (routine_id,))
+                
+                row = await cursor.fetchone()
+                if not row:
+                    return False
+                
+                # Parse activities and update the status
+                activities = json.loads(row[0])
+                if 0 <= activity_index < len(activities):
+                    activities[activity_index]["completed"] = completed
+                    
+                    # Save back to database
+                    await db.execute("""
+                        UPDATE routines SET activities = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (json.dumps(activities), routine_id))
+                    
+                    await db.commit()
+                    return True
+                
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to update activity status: {str(e)}")
+            return False
+    
+    async def log_activity_completion(self, child_id: int, activity_name: str, routine_id: int = None, completed_at: datetime = None) -> bool:
+        """Log an activity completion."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("""
+                    INSERT INTO activity_logs (
+                        child_id, activity_name, routine_id, completed_at
+                    ) VALUES (?, ?, ?, ?)
+                """, (
+                    child_id,
+                    activity_name,
+                    routine_id,
+                    completed_at or datetime.now()
+                ))
+                
+                await db.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to log activity completion: {str(e)}")
+            return False
     
     async def get_interactions_by_date_range(
         self,
@@ -426,101 +615,31 @@ class DatabaseManager:
             logger.error(f"Failed to get milestones for child {child_id}: {str(e)}")
             return []
     
-    async def create_routine_session(self, session_data: Dict[str, Any]) -> int:
-        """Create a new routine session."""
+    async def save_interaction(self, interaction: Interaction) -> int:
+        """Save an interaction to the database."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 cursor = await db.execute("""
-                    INSERT INTO routine_sessions (routine_id, child_id, started_at, current_activity, total_activities, status)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO interactions (child_id, interaction_type, content, response, success, duration_seconds, emotion_detected, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    session_data["routine_id"],
-                    session_data["child_id"],
-                    session_data["started_at"].isoformat(),
-                    session_data["current_activity"],
-                    session_data["total_activities"],
-                    session_data["status"]
+                    interaction.child_id,
+                    interaction.interaction_type,
+                    interaction.content,
+                    interaction.response,
+                    interaction.success,
+                    interaction.duration_seconds,
+                    interaction.emotion_detected,
+                    interaction.timestamp.isoformat()
                 ))
                 
-                session_id = cursor.lastrowid
+                interaction_id = cursor.lastrowid
                 await db.commit()
                 
-                return session_id
+                return interaction_id
         
         except Exception as e:
-            logger.error(f"Failed to create routine session: {str(e)}")
-            raise
-    
-    async def get_routine_session(self, session_id: int) -> Optional[Dict[str, Any]]:
-        """Get a routine session by ID."""
-        try:
-            async with aiosqlite.connect(self.db_path) as db:
-                db.row_factory = aiosqlite.Row
-                cursor = await db.execute("""
-                    SELECT * FROM routine_sessions WHERE id = ?
-                """, (session_id,))
-                
-                row = await cursor.fetchone()
-                if row:
-                    return dict(row)
-                
-                return None
-        
-        except Exception as e:
-            logger.error(f"Failed to get routine session {session_id}: {str(e)}")
-            return None
-    
-    async def update_routine_session(self, session_id: int, updates: Dict[str, Any]):
-        """Update a routine session."""
-        try:
-            async with aiosqlite.connect(self.db_path) as db:
-                # Build dynamic update query
-                set_clauses = []
-                values = []
-                
-                for key, value in updates.items():
-                    set_clauses.append(f"{key} = ?")
-                    values.append(value)
-                
-                values.append(session_id)
-                
-                query = f"UPDATE routine_sessions SET {', '.join(set_clauses)} WHERE id = ?"
-                await db.execute(query, values)
-                await db.commit()
-        
-        except Exception as e:
-            logger.error(f"Failed to update routine session: {str(e)}")
-            raise
-    
-    async def log_activity_completion(
-        self,
-        child_id: int,
-        activity_name: str,
-        completed_at: datetime,
-        duration_seconds: Optional[int] = None,
-        difficulty_rating: Optional[int] = None,
-        enjoyment_rating: Optional[int] = None
-    ):
-        """Log the completion of an activity."""
-        try:
-            async with aiosqlite.connect(self.db_path) as db:
-                await db.execute("""
-                    INSERT INTO activity_completions 
-                    (child_id, activity_name, completed_at, duration_seconds, difficulty_rating, enjoyment_rating)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    child_id,
-                    activity_name,
-                    completed_at.isoformat(),
-                    duration_seconds,
-                    difficulty_rating,
-                    enjoyment_rating
-                ))
-                
-                await db.commit()
-        
-        except Exception as e:
-            logger.error(f"Failed to log activity completion: {str(e)}")
+            logger.error(f"Failed to save interaction: {str(e)}")
             raise
     
     async def save_progress_snapshot(

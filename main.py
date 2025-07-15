@@ -573,10 +573,42 @@ async def configure_llm(
             status_code=500
         )
 
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
+@app.get("/progress/{child_id}")
+async def view_progress_report(request: Request, child_id: int):
+    """Render the progress report page for a child."""
+    try:
+        # Get child information
+        child = await db_manager.get_child(child_id)
+        if not child:
+            raise HTTPException(status_code=404, detail="Child not found")
+        
+        # Get detailed progress data
+        progress = await progress_tracker.get_detailed_progress(child_id)
+        basic_progress = await progress_tracker.get_child_progress(child_id)
+        
+        # Get milestones
+        milestones = await progress_tracker.get_child_milestones(child_id)
+        
+        # Get recent activities
+        recent_activities = await progress_tracker.get_recent_interactions(child_id, limit=10)
+        
+        # Get statistics
+        stats = await progress_tracker.get_child_statistics(child_id)
+        
+        # Generate AI insights
+        insights = await progress_tracker.generate_insights(child_id)
+        
+        return templates.TemplateResponse("progress_report.html", {
+            "request": request,
+            "child": child,
+            "progress": basic_progress,
+            "detailed_progress": progress,
+            "milestones": milestones,
+            "recent_activities": recent_activities,
+            "stats": stats,
+            "insights": insights
+        })
+    
+    except Exception as e:
+        logger.error(f"Progress report error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to load progress report")

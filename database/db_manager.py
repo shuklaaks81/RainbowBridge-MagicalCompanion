@@ -198,6 +198,41 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to create child: {str(e)}")
             raise
+
+    async def fetch_all(self, query: str, params: tuple = ()) -> List[Dict[str, Any]]:
+        """Execute a query and return all results as a list of dictionaries."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute(query, params)
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to fetch all rows: {str(e)}")
+            return []
+
+    async def fetch_one(self, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
+        """Execute a query and return one result as a dictionary."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute(query, params)
+                row = await cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Failed to fetch one row: {str(e)}")
+            return None
+
+    async def execute_query(self, query: str, params: tuple = ()) -> bool:
+        """Execute a query and return success status."""
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(query, params)
+                await db.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to execute query: {str(e)}")
+            return False
     
     async def get_child(self, child_id: int) -> Optional[Dict[str, Any]]:
         """Get a child's profile by ID."""

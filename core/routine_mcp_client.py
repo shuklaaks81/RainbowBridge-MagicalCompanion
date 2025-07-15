@@ -64,7 +64,9 @@ class RoutineMCPClient:
             ],
             "start_routine": [
                 "start routine", "begin routine", "do routine", "time for routine",
-                "ready for routine", "let's start routine", "begin my routine"
+                "ready for routine", "let's start routine", "begin my routine",
+                "start my", "begin my", "do my", "time for my", "ready for my",
+                "morning routine", "evening routine", "bedtime routine", "homework routine"
             ],
             "complete_activity": [
                 "done", "finished", "completed", "did it", "finished with",
@@ -85,6 +87,8 @@ class RoutineMCPClient:
         }
         
         # If there are active sessions, prioritize activity completion over routine creation
+        detected_intent = None  # Initialize variable
+        
         if has_active_sessions:
             # Look for activity completion patterns first
             for pattern in intent_patterns["complete_activity"]:
@@ -122,12 +126,10 @@ class RoutineMCPClient:
                 }
                 intent_data.update(self._extract_activity_name(message))
                 return intent_data
-        else:
-            # Normal intent detection when no active sessions
-            detected_intent = None
         
         # Continue with normal intent detection if not already detected
         if not detected_intent:
+            # First, try exact phrase matching
             for intent, patterns in intent_patterns.items():
                 for pattern in patterns:
                     if pattern in message_lower:
@@ -136,6 +138,33 @@ class RoutineMCPClient:
                         break
                 if detected_intent:
                     break
+            
+            # If no exact match, try more flexible word-based matching for routine intents
+            if not detected_intent:
+                words = message_lower.split()
+                
+                # Check for routine starting keywords
+                start_words = ["start", "begin", "do", "time"]
+                routine_words = ["routine", "morning", "evening", "bedtime", "homework"]
+                
+                if any(start_word in words for start_word in start_words) and any(routine_word in words for routine_word in routine_words):
+                    detected_intent = "start_routine"
+                    logger.info(f"DEBUG: Matched flexible start routine pattern for: '{message}'")
+                
+                # Check for activity completion keywords
+                completion_words = ["done", "finished", "completed", "did", "complete"]
+                activity_words = ["activity", "task", "step", "it"]
+                
+                if any(comp_word in words for comp_word in completion_words):
+                    if any(act_word in words for act_word in activity_words) or len(words) <= 3:
+                        detected_intent = "complete_activity"
+                        logger.info(f"DEBUG: Matched flexible completion pattern for: '{message}'")
+                
+                # Check for routine creation keywords
+                create_words = ["create", "make", "new", "add", "build"]
+                if any(create_word in words for create_word in create_words) and any(routine_word in words for routine_word in routine_words):
+                    detected_intent = "create_routine"
+                    logger.info(f"DEBUG: Matched flexible creation pattern for: '{message}'")
         
         if not detected_intent:
             logger.info(f"DEBUG: No intent patterns matched for message: '{message}'")

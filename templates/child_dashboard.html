@@ -174,6 +174,20 @@
             border-radius: 20px;
             font-size: 0.9rem;
             border: 2px solid #4a90e2;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .visual-cue:hover {
+            background: #4a90e2;
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
+        }
+
+        .visual-cue:active {
+            transform: scale(0.95);
         }
 
         .chat-input-area {
@@ -429,6 +443,84 @@
             color: white;
         }
 
+        .quick-communication {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .quick-section label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .quick-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .quick-btn {
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+            user-select: none;
+        }
+
+        .quick-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .quick-btn.emotion {
+            border-color: #ff6b6b;
+            color: #ff6b6b;
+        }
+
+        .quick-btn.emotion:hover {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .quick-btn.need {
+            border-color: #4ecdc4;
+            color: #4ecdc4;
+        }
+
+        .quick-btn.need:hover {
+            background: #4ecdc4;
+            color: white;
+        }
+
+        .quick-btn.social {
+            border-color: #45b7d1;
+            color: #45b7d1;
+        }
+
+        .quick-btn.social:hover {
+            background: #45b7d1;
+            color: white;
+        }
+
+        .quick-btn.achievement {
+            border-color: #96ceb4;
+            color: #96ceb4;
+        }
+
+        .quick-btn.achievement:hover {
+            background: #96ceb4;
+            color: white;
+        }
+
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -490,9 +582,9 @@
                                 <div class="message-sender">🌈 Rainbow Bridge</div>
                                 <div>Hi {{ child.name }}! 🌈 I'm Rainbow Bridge, your colorful companion! How are you feeling today?</div>
                                 <div class="visual-cues">
-                                    <span class="visual-cue">😊</span>
-                                    <span class="visual-cue">🌈</span>
-                                    <span class="visual-cue">❤️</span>
+                                    <span class="visual-cue" onclick="sendVisualCue('I feel happy')" title="Click to send: I feel happy">😊</span>
+                                    <span class="visual-cue" onclick="sendVisualCue('I like Rainbow Bridge')" title="Click to send: I like Rainbow Bridge">🌈</span>
+                                    <span class="visual-cue" onclick="sendVisualCue('I feel loved')" title="Click to send: I feel loved">❤️</span>
                                 </div>
                             </div>
                         </div>
@@ -507,6 +599,22 @@
                             <input type="text" class="chat-input" id="messageInput" placeholder="Type your message here...">
                             <button class="send-btn" onclick="sendMessage()">Send</button>
                         </div>
+                        
+                        <!-- Quick communication buttons -->
+                        <div class="quick-communication" id="quickCommButtons">
+                            <div class="quick-section">
+                                <label>Quick Responses:</label>
+                                <div class="quick-buttons">
+                                    <button class="quick-btn emotion" onclick="sendQuickMessage('I feel happy')">😊 Happy</button>
+                                    <button class="quick-btn emotion" onclick="sendQuickMessage('I feel sad')">😢 Sad</button>
+                                    <button class="quick-btn need" onclick="sendQuickMessage('I need help')">🆘 Help</button>
+                                    <button class="quick-btn need" onclick="sendQuickMessage('I am hungry')">🍽️ Hungry</button>
+                                    <button class="quick-btn social" onclick="sendQuickMessage('Thank you')">🙏 Thanks</button>
+                                    <button class="quick-btn achievement" onclick="sendQuickMessage('I did it!')">🎉 Done!</button>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div id="visualCardsContainer" class="visual-cards-container" style="display: none;"></div>
                     </div>
                 </div>
@@ -834,7 +942,9 @@
             if (visualCues && visualCues.length > 0) {
                 html += '<div class="visual-cues">';
                 visualCues.forEach(cue => {
-                    html += `<span class="visual-cue">${getVisualCueIcon(cue)}</span>`;
+                    const cueIcon = getVisualCueIcon(cue);
+                    const cueText = cue.replace(/_/g, ' '); // Convert underscore to space for display
+                    html += `<span class="visual-cue" onclick="sendVisualCue('${cueText}')" title="Click to send: ${cueText}">${cueIcon}</span>`;
                 });
                 html += '</div>';
             }
@@ -867,11 +977,44 @@
                 'celebration': '🎉',
                 'lightbulb': '💡',
                 'question': '❓',
-                'thinking': '🤔'
+                'thinking': '🤔',
+                'calm': '😌',
+                'comfort': '🤗',
+                'adjusting': '🔧',
+                'helping_hand': '✋',
+                'patience': '⏳',
+                'step_by_step': '📋',
+                'friendly_wave': '👋',
+                'smile': '😊',
+                'play_icon': '🎮',
+                'book': '📚',
+                'art': '🎨',
+                'paintbrush': '🖌️',
+                'speaker': '🔊',
+                'peaceful': '☮️',
+                'grateful': '🙏',
+                'polite': '🎩',
+                'encouragement': '💪',
+                'partnership': '🤝',
+                'support': '🛟'
             };
             
             // Return the icon if found, otherwise return the cue as text with a default emoji
             return icons[cue] || `✨ ${cue}`;
+        }
+
+        function sendVisualCue(cueText) {
+            // Set the message input to the visual cue and send it
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value = cueText;
+            sendMessage();
+        }
+
+        function sendQuickMessage(message) {
+            // Send a quick predefined message
+            const messageInput = document.getElementById('messageInput');
+            messageInput.value = message;
+            sendMessage();
         }
 
         // Allow Enter key to send message
@@ -1032,8 +1175,8 @@
         }
 
         function viewDetailedProgress() {
-            // This would open a detailed progress view
-            window.open(`/api/progress/${childId}`, '_blank');
+            // Open the detailed progress report page
+            window.open(`/progress/${childId}`, '_blank');
         }
     </script>
 </body>

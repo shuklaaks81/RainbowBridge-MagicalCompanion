@@ -220,6 +220,13 @@ class SpecialKidsAI:
                 else:
                     logger.info(f"No routine intent detected for: '{message}'")
             
+            # Check for broader communication intents if no routine intent found
+            communication_intent = await self._detect_communication_intent(message, child_id)
+            if communication_intent:
+                logger.info(f"Detected communication intent: {communication_intent['primary_intent']['intent']}")
+                intent_response = await self._generate_intent_based_response(communication_intent, message)
+                return intent_response
+            
             ai_text = ""
             
             # Try local LLM first if enabled
@@ -342,7 +349,7 @@ class SpecialKidsAI:
         child_id: int,
         system_prompt: str
     ) -> Dict[str, Any]:
-        """Process audio-based communication."""
+        """Process audio-based communication"""
         # For now, provide a supportive response for audio communication
         return {
             "text": "I love hearing your voice! It adds beautiful colors to Rainbow Bridge! 🌈🎵",
@@ -370,44 +377,195 @@ class SpecialKidsAI:
         return "neutral"
     
     def _suggest_visual_cues(self, input_message: str, ai_response: str) -> List[str]:
-        """Suggest visual cues based on the conversation context."""
+        """Suggest enhanced visual cues based on the conversation context."""
         visual_cues = []
+        input_lower = input_message.lower()
+        response_lower = ai_response.lower()
         
-        # Basic visual cues based on content
-        if any(word in input_message.lower() for word in ["happy", "good", "like"]):
-            visual_cues.append("happy_face")
+        # Emotional expression visual cues
+        if any(word in input_lower for word in ["happy", "good", "great", "excited", "love", "like"]):
+            visual_cues.extend(["happy_face", "star", "rainbow"])
         
-        if any(word in input_message.lower() for word in ["sad", "upset", "don't like"]):
-            visual_cues.append("comfort_hug")
+        if any(word in input_lower for word in ["sad", "upset", "crying", "hurt", "bad"]):
+            visual_cues.extend(["comfort_hug", "heart", "rainbow"])
         
-        if any(word in ai_response.lower() for word in ["great", "good job", "well done"]):
-            visual_cues.append("thumbs_up")
+        if any(word in input_lower for word in ["angry", "mad", "frustrated"]):
+            visual_cues.extend(["calm", "breathing", "comfort_hug"])
         
-        if any(word in ai_response.lower() for word in ["try", "practice"]):
-            visual_cues.append("practice_icon")
+        if any(word in input_lower for word in ["scared", "afraid", "worried"]):
+            visual_cues.extend(["comfort_hug", "safety", "heart"])
         
-        # Default encouraging visual cue
+        if any(word in input_lower for word in ["tired", "sleepy", "exhausted"]):
+            visual_cues.extend(["rest", "calm", "moon"])
+        
+        # Need expression visual cues
+        if any(word in input_lower for word in ["hungry", "eat", "food"]):
+            visual_cues.extend(["food", "apple", "plate"])
+        
+        if any(word in input_lower for word in ["thirsty", "drink", "water"]):
+            visual_cues.extend(["water", "cup", "drink"])
+        
+        if any(word in input_lower for word in ["bathroom", "potty", "toilet"]):
+            visual_cues.extend(["bathroom", "checkmark"])
+        
+        if any(word in input_lower for word in ["help", "stuck", "can't"]):
+            visual_cues.extend(["helping_hand", "support", "rainbow"])
+        
+        # Activity and learning visual cues
+        if any(word in input_lower for word in ["play", "game", "fun"]):
+            visual_cues.extend(["play_icon", "star", "rainbow"])
+        
+        if any(word in input_lower for word in ["learn", "teach", "show", "how"]):
+            visual_cues.extend(["lightbulb", "book", "thinking"])
+        
+        if any(word in input_lower for word in ["draw", "color", "art"]):
+            visual_cues.extend(["art", "paintbrush", "rainbow"])
+        
+        if any(word in input_lower for word in ["music", "song", "sing"]):
+            visual_cues.extend(["musical_note", "speaker", "heart"])
+        
+        # Achievement and celebration visual cues
+        if any(word in response_lower for word in ["great", "good job", "well done", "amazing", "proud"]):
+            visual_cues.extend(["thumbs_up", "trophy", "celebration"])
+        
+        if any(word in input_lower for word in ["did it", "finished", "done", "completed"]):
+            visual_cues.extend(["checkmark", "star", "celebration"])
+        
+        # Sensory and comfort visual cues
+        if any(word in input_lower for word in ["loud", "noise", "bright", "too much"]):
+            visual_cues.extend(["calm", "quiet", "adjusting"])
+        
+        if any(word in input_lower for word in ["quiet", "soft", "gentle"]):
+            visual_cues.extend(["calm", "peaceful", "heart"])
+        
+        # Social interaction visual cues
+        if any(word in input_lower for word in ["hello", "hi", "hey"]):
+            visual_cues.extend(["friendly_wave", "rainbow", "smile"])
+        
+        if any(word in input_lower for word in ["thank you", "thanks"]):
+            visual_cues.extend(["heart", "grateful", "rainbow"])
+        
+        if any(word in input_lower for word in ["please"]):
+            visual_cues.extend(["polite", "heart", "star"])
+        
+        # Response-based visual cues
+        if any(word in response_lower for word in ["practice", "try", "attempt"]):
+            visual_cues.extend(["practice_icon", "star", "encouragement"])
+        
+        if any(word in response_lower for word in ["rainbow", "colorful", "magical"]):
+            visual_cues.extend(["rainbow", "sparkles", "magic_wand"])
+        
+        if any(word in response_lower for word in ["step", "slowly", "together"]):
+            visual_cues.extend(["step_by_step", "partnership", "support"])
+        
+        # Remove duplicates and limit to 3-4 visual cues to avoid overwhelming
+        visual_cues = list(dict.fromkeys(visual_cues))[:4]
+        
+        # Default encouraging visual cues if none found
         if not visual_cues:
-            visual_cues.append("friendly_robot")
+            visual_cues = ["rainbow", "friendly_robot", "heart"]
         
         return visual_cues
     
     def _suggest_actions(self, input_message: str, ai_response: str) -> List[str]:
-        """Suggest follow-up actions based on the conversation."""
+        """Suggest enhanced follow-up actions based on the conversation context."""
         actions = []
+        input_lower = input_message.lower()
+        response_lower = ai_response.lower()
         
-        if any(word in input_message.lower() for word in ["routine", "schedule"]):
+        # Routine and schedule actions
+        if any(word in input_lower for word in ["routine", "schedule", "activities"]):
             actions.append("view_routine")
         
-        if any(word in input_message.lower() for word in ["learn", "practice"]):
+        if any(word in input_lower for word in ["create", "make", "new routine"]):
+            actions.append("create_routine")
+        
+        if any(word in input_lower for word in ["start", "begin", "ready"]):
             actions.append("start_activity")
         
-        if any(word in ai_response.lower() for word in ["picture", "show"]):
+        # Learning and educational actions
+        if any(word in input_lower for word in ["learn", "teach", "show me", "how to"]):
+            actions.append("start_learning")
+        
+        if any(word in input_lower for word in ["practice", "try", "work on"]):
+            actions.append("practice_skill")
+        
+        if any(word in input_lower for word in ["what is", "explain", "tell me"]):
+            actions.append("get_explanation")
+        
+        # Emotional support actions
+        if any(word in input_lower for word in ["sad", "upset", "angry", "frustrated"]):
+            actions.append("emotional_support")
+        
+        if any(word in input_lower for word in ["scared", "worried", "afraid"]):
+            actions.append("comfort_activity")
+        
+        if any(word in input_lower for word in ["calm", "relax", "breathe"]):
+            actions.append("calming_activity")
+        
+        # Physical needs actions
+        if any(word in input_lower for word in ["hungry", "eat", "food"]):
+            actions.append("meal_time")
+        
+        if any(word in input_lower for word in ["thirsty", "drink", "water"]):
+            actions.append("drink_water")
+        
+        if any(word in input_lower for word in ["tired", "sleepy", "rest"]):
+            actions.append("rest_time")
+        
+        if any(word in input_lower for word in ["bathroom", "potty"]):
+            actions.append("bathroom_break")
+        
+        # Activity and play actions
+        if any(word in input_lower for word in ["play", "game", "fun"]):
+            actions.append("play_activity")
+        
+        if any(word in input_lower for word in ["draw", "color", "art"]):
+            actions.append("creative_activity")
+        
+        if any(word in input_lower for word in ["music", "song", "listen"]):
+            actions.append("music_activity")
+        
+        if any(word in input_lower for word in ["outside", "walk", "fresh air"]):
+            actions.append("outdoor_activity")
+        
+        # Social and communication actions
+        if any(word in input_lower for word in ["talk", "tell", "share"]):
+            actions.append("continue_conversation")
+        
+        if any(word in input_lower for word in ["friends", "social", "others"]):
+            actions.append("social_activity")
+        
+        # Visual and sensory actions
+        if any(word in response_lower for word in ["picture", "show", "visual", "image"]):
             actions.append("show_pictures")
         
-        # Default action
+        if any(word in input_lower for word in ["loud", "bright", "too much", "overwhelming"]):
+            actions.append("sensory_adjustment")
+        
+        if any(word in input_lower for word in ["quiet", "soft", "gentle"]):
+            actions.append("quiet_activity")
+        
+        # Achievement and progress actions
+        if any(word in input_lower for word in ["finished", "done", "completed"]):
+            actions.append("celebrate_achievement")
+        
+        if any(word in response_lower for word in ["progress", "improvement", "learning"]):
+            actions.append("track_progress")
+        
+        # Help and support actions
+        if any(word in input_lower for word in ["help", "stuck", "difficult", "hard"]):
+            actions.append("get_help")
+        
+        if any(word in input_lower for word in ["don't understand", "confused"]):
+            actions.append("break_down_steps")
+        
+        # Remove duplicates and limit to 3 actions to avoid overwhelming
+        actions = list(dict.fromkeys(actions))[:3]
+        
+        # Default action if none found
         if not actions:
-            actions.append("continue_chat")
+            actions = ["continue_conversation", "show_pictures", "start_activity"]
         
         return actions
     
@@ -915,3 +1073,224 @@ Choose a peaceful activity you enjoy
         }
         
         return routine_actions.get(intent, ["continue_chat"])
+    
+    async def _detect_communication_intent(self, message: str, child_id: int) -> Dict[str, Any]:
+        """
+        Detect broader communication intents beyond just routines.
+        This handles emotional, social, educational, and general communication patterns.
+        """
+        message_lower = message.lower().strip()
+        detected_intents = []
+        
+        # Communication intent patterns for autistic children
+        intent_patterns = {
+            "emotional_expression": {
+                "patterns": [
+                    "i feel", "i'm feeling", "feeling", "i am", "i'm sad", "i'm happy", 
+                    "i'm angry", "i'm scared", "i'm excited", "i'm tired", "i'm frustrated",
+                    "upset", "mad", "good", "bad", "okay", "fine", "not good"
+                ],
+                "confidence": 0.85,
+                "visual_cues": ["heart", "rainbow", "comfort_hug"],
+                "response_type": "emotional_support"
+            },
+            "need_expression": {
+                "patterns": [
+                    "i need", "i want", "can i have", "i'm hungry", "i'm thirsty", 
+                    "bathroom", "toilet", "tired", "sleepy", "help me", "i need help",
+                    "can you help", "hungry", "thirsty", "potty"
+                ],
+                "confidence": 0.90,
+                "visual_cues": ["helping_hand", "checkmark", "heart"],
+                "response_type": "need_fulfillment"
+            },
+            "social_communication": {
+                "patterns": [
+                    "hello", "hi", "hey", "goodbye", "bye", "thank you", "thanks",
+                    "please", "sorry", "excuse me", "yes", "no", "maybe", "i don't know"
+                ],
+                "confidence": 0.80,
+                "visual_cues": ["friendly_wave", "smile", "thumbs_up"],
+                "response_type": "social_interaction"
+            },
+            "learning_request": {
+                "patterns": [
+                    "what is", "how do", "can you teach", "i want to learn", "explain",
+                    "tell me about", "what does", "why", "how", "show me", "help me understand"
+                ],
+                "confidence": 0.85,
+                "visual_cues": ["lightbulb", "book", "thinking"],
+                "response_type": "educational_support"
+            },
+            "activity_interest": {
+                "patterns": [
+                    "want to play", "can we play", "i like", "favorite", "fun", "game",
+                    "toy", "book", "music", "draw", "color", "outside", "park"
+                ],
+                "confidence": 0.80,
+                "visual_cues": ["play_icon", "star", "rainbow"],
+                "response_type": "activity_engagement"
+            },
+            "sensory_feedback": {
+                "patterns": [
+                    "too loud", "too bright", "too much", "quiet", "loud", "bright",
+                    "dark", "hot", "cold", "soft", "hard", "texture", "sound", "noise"
+                ],
+                "confidence": 0.90,
+                "visual_cues": ["calm", "comfort", "adjusting"],
+                "response_type": "sensory_support"
+            },
+            "confusion_difficulty": {
+                "patterns": [
+                    "i don't understand", "confused", "hard", "difficult", "too hard",
+                    "i can't", "don't know how", "stuck", "help", "lost"
+                ],
+                "confidence": 0.85,
+                "visual_cues": ["helping_hand", "patience", "step_by_step"],
+                "response_type": "guidance_support"
+            },
+            "achievement_sharing": {
+                "patterns": [
+                    "i did it", "look what i did", "finished", "completed", "done",
+                    "proud", "good job", "success", "accomplished", "made"
+                ],
+                "confidence": 0.85,
+                "visual_cues": ["celebration", "trophy", "star", "thumbs_up"],
+                "response_type": "celebration_support"
+            }
+        }
+        
+        # Analyze message for each intent type
+        for intent_type, intent_data in intent_patterns.items():
+            for pattern in intent_data["patterns"]:
+                if pattern in message_lower:
+                    detected_intents.append({
+                        "intent": intent_type,
+                        "confidence": intent_data["confidence"],
+                        "pattern_matched": pattern,
+                        "visual_cues": intent_data["visual_cues"],
+                        "response_type": intent_data["response_type"],
+                        "child_id": child_id,
+                        "original_message": message
+                    })
+                    break  # Only match one pattern per intent type
+        
+        # If multiple intents detected, prioritize by confidence and context
+        if detected_intents:
+            # Sort by confidence (highest first)
+            detected_intents.sort(key=lambda x: x["confidence"], reverse=True)
+            primary_intent = detected_intents[0]
+            
+            # Add secondary intents if they're strong enough
+            secondary_intents = [intent for intent in detected_intents[1:] if intent["confidence"] > 0.75]
+            
+            return {
+                "primary_intent": primary_intent,
+                "secondary_intents": secondary_intents,
+                "has_multiple_intents": len(detected_intents) > 1,
+                "total_intents_detected": len(detected_intents)
+            }
+        
+        return None
+
+    async def _generate_intent_based_response(self, intent_data: Dict[str, Any], message: str) -> Dict[str, Any]:
+        """Generate a response based on detected communication intent."""
+        primary_intent = intent_data["primary_intent"]
+        intent_type = primary_intent["intent"]
+        response_type = primary_intent["response_type"]
+        
+        # Generate contextual responses based on intent
+        response_templates = {
+            "emotional_support": [
+                "I can hear that you're feeling {emotion}. That's completely okay! 🌈",
+                "Thank you for sharing your feelings with me. You're being so brave! 💚",
+                "Feelings are like colors in a rainbow - they're all important! Let's talk about it. 🌈"
+            ],
+            "need_fulfillment": [
+                "I understand you need {need}. Let me help you with that! 🤗",
+                "It's great that you told me what you need! That's excellent communication! ⭐",
+                "Let's work together to help you feel better. You did the right thing by asking! 💪"
+            ],
+            "social_interaction": [
+                "Hello there, wonderful friend! 🌈 I'm so happy to talk with you!",
+                "Thank you for being so polite! You have excellent manners! ✨",
+                "I love chatting with you! You're such a great communicator! 😊"
+            ],
+            "educational_support": [
+                "What a fantastic question! I love when you're curious about learning! 📚",
+                "You're such a wonderful learner! Let me help you understand that. 🌟",
+                "Great question! Learning new things is like collecting colorful gems! 💎"
+            ],
+            "activity_engagement": [
+                "That sounds like so much fun! I love your enthusiasm! 🎉",
+                "What a wonderful activity choice! You have great ideas! ⭐",
+                "Playing and having fun is so important! You're making great choices! 🌈"
+            ],
+            "sensory_support": [
+                "I understand that doesn't feel comfortable for you. Let's find a better way! 🤗",
+                "Thank you for telling me about that. Your comfort is very important! 💚",
+                "Everyone has different sensory needs, and yours matter! Let's adjust things. ✨"
+            ],
+            "guidance_support": [
+                "It's perfectly okay to find things challenging sometimes! Let's break it down together. 🌟",
+                "You're so smart for asking for help! That takes courage! 💪",
+                "Every expert was once a beginner. Let's take it step by step! 🌈"
+            ],
+            "celebration_support": [
+                "WOW! Look at what you accomplished! I'm so proud of you! 🎉",
+                "You did such an amazing job! That deserves a celebration! 🌟",
+                "What a fantastic achievement! You should feel so proud of yourself! 🏆"
+            ]
+        }
+        
+        # Select appropriate response template
+        templates = response_templates.get(response_type, response_templates["social_interaction"])
+        import random
+        selected_template = random.choice(templates)
+        
+        # Personalize the response based on the message content
+        personalized_response = self._personalize_response(selected_template, message, primary_intent)
+        
+        return {
+            "text": personalized_response,
+            "visual_cues": primary_intent["visual_cues"],
+            "emotion": "encouraging",
+            "confidence": primary_intent["confidence"],
+            "suggested_actions": self._get_intent_actions(intent_type),
+            "communication_type": "text",
+            "intent_detected": intent_type,
+            "response_type": response_type,
+            "llm_source": "intent_based"
+        }
+
+    def _personalize_response(self, template: str, message: str, intent: Dict[str, Any]) -> str:
+        """Personalize response template based on message content."""
+        message_lower = message.lower()
+        
+        # Extract key words for personalization
+        if "{emotion}" in template:
+            emotions = ["happy", "sad", "angry", "excited", "tired", "frustrated", "scared"]
+            detected_emotion = next((emotion for emotion in emotions if emotion in message_lower), "that way")
+            template = template.replace("{emotion}", detected_emotion)
+        
+        if "{need}" in template:
+            needs = ["help", "food", "water", "bathroom", "rest", "break"]
+            detected_need = next((need for need in needs if need in message_lower), "something")
+            template = template.replace("{need}", detected_need)
+        
+        return template
+
+    def _get_intent_actions(self, intent_type: str) -> List[str]:
+        """Get suggested actions based on intent type."""
+        action_map = {
+            "emotional_expression": ["Take deep breaths", "Talk about feelings", "Use calming activities"],
+            "need_expression": ["Address immediate need", "Check comfort level", "Offer alternatives"],
+            "social_interaction": ["Continue conversation", "Practice social skills", "Engage in interaction"],
+            "learning_request": ["Provide explanation", "Use visual aids", "Break down information"],
+            "activity_interest": ["Explore activity options", "Plan activity time", "Gather materials"],
+            "sensory_feedback": ["Adjust environment", "Offer sensory tools", "Check comfort"],
+            "guidance_support": ["Break down steps", "Provide encouragement", "Offer different approach"],
+            "achievement_sharing": ["Celebrate success", "Acknowledge effort", "Share pride"]
+        }
+        
+        return action_map.get(intent_type, ["Continue conversation", "Provide support"])

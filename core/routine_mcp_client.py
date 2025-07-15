@@ -40,6 +40,82 @@ class RoutineMCPClient:
             "update_routine"
         ]
     
+    async def call_tool(self, tool_name: str, parameters: Dict[str, Any]) -> MCPToolResult:
+        """Call an MCP tool with the given parameters."""
+        try:
+            if tool_name not in self.available_tools:
+                return MCPToolResult(
+                    success=False,
+                    content="🌈 That's not something I can help with right now! ✨",
+                    error=f"Tool {tool_name} not available"
+                )
+            
+            # Route to appropriate handler
+            return await self.handle_routine_request(parameters)
+            
+        except Exception as e:
+            logger.error(f"Error calling tool {tool_name}: {str(e)}")
+            return MCPToolResult(
+                success=False,
+                content="🌈 Something went colorfully wrong! Let's try again! ✨",
+                error=str(e)
+            )
+    
+    async def _get_current_activity_context(self, child_id: int) -> Optional[Dict[str, Any]]:
+        """Get current activity context for enhanced communication."""
+        try:
+            from database.db_manager import DatabaseManager
+            db = DatabaseManager()
+            
+            # Get active routine sessions
+            active_sessions = await db.get_active_routine_sessions(child_id)
+            if not active_sessions:
+                return None
+            
+            # Get the most recent active routine
+            routine_id = active_sessions[0]['routine_id']
+            routine_name = active_sessions[0].get('routine_name', 'your routine')
+            
+            # Get routine details to find current activity
+            routine_data = await db.get_routine(routine_id)
+            if not routine_data:
+                return None
+            
+            activities = routine_data.get("activities", [])
+            total_activities = len(activities)
+            completed_count = sum(1 for activity in activities if activity.get("completed", False))
+            progress_percentage = round((completed_count / total_activities) * 100) if total_activities > 0 else 0
+            
+            # Find current activity (first incomplete one)
+            current_activity = None
+            next_activity = None
+            current_activity_index = None
+            
+            for i, activity in enumerate(activities):
+                if not activity.get("completed", False):
+                    current_activity = activity
+                    current_activity_index = i
+                    # Get next activity if available
+                    if i + 1 < len(activities):
+                        next_activity = activities[i + 1]
+                    break
+            
+            return {
+                "routine_id": routine_id,
+                "routine_name": routine_name,
+                "current_activity": current_activity,
+                "current_activity_index": current_activity_index,
+                "next_activity": next_activity,
+                "total_activities": total_activities,
+                "completed_count": completed_count,
+                "progress_percentage": progress_percentage,
+                "remaining_activities": total_activities - completed_count
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get current activity context: {e}")
+            return None
+    
     async def detect_routine_intent(self, message: str, child_id: int) -> Optional[Dict[str, Any]]:
         """Detect if a message contains routine-related intent."""
         message_lower = message.lower()
@@ -69,9 +145,39 @@ class RoutineMCPClient:
                 "morning routine", "evening routine", "bedtime routine", "homework routine"
             ],
             "complete_activity": [
+                # Traditional completion phrases
                 "done", "finished", "completed", "did it", "finished with",
                 "I'm done", "just finished", "complete", "mark done",
-                "activity done", "task done", "step done"
+                "activity done", "task done", "step done",
+                
+                # Natural general phrases special kids use
+                "I woke up", "woke up", "got up", "wake up",
+                "I got dressed", "got dressed", "put on clothes", "clothes on",
+                "I ate", "ate breakfast", "ate lunch", "ate dinner", "eating",
+                "I brushed", "brushed teeth", "teeth clean", "teeth brushed",
+                "I washed", "washed hands", "hands clean", "washed face",
+                "I took a bath", "bath time", "took bath", "had a bath",
+                "I put on", "shoes on", "put shoes", "wearing shoes",
+                "I read", "reading done", "book finished", "story done",
+                "I played", "playing done", "game over", "finished playing",
+                "I did homework", "homework done", "school work done",
+                "I cleaned", "room clean", "toys away", "cleaned up",
+                "I went to bed", "bedtime", "in bed", "sleeping time",
+                
+                # Simple action statements
+                "teeth", "hands", "face", "shoes", "clothes", "breakfast", 
+                "lunch", "dinner", "bath", "shower", "book", "homework",
+                "toys", "bed", "sleep",
+                
+                # Present tense (happening now)
+                "doing", "working on", "at", "with",
+                
+                # Past simple forms
+                "went", "had", "took", "made", "came", "saw",
+                
+                # Child-friendly expressions
+                "all clean", "all done", "ready", "good", "finished that",
+                "that's done", "yay", "hooray", "I did good"
             ],
             "get_suggestions": [
                 "what should i do", "activity ideas", "suggest", "what activities",
@@ -179,6 +285,11 @@ class RoutineMCPClient:
             "active_sessions": active_sessions if has_active_sessions else []
         }
         
+        # Add current activity context for enhanced communication
+        current_context = await self._get_current_activity_context(child_id)
+        if current_context:
+            intent_data["current_activity_context"] = current_context
+        
         # Extract specific parameters
         if detected_intent == "create_routine":
             intent_data.update(self._extract_create_routine_params(message))
@@ -206,16 +317,21 @@ class RoutineMCPClient:
         
         # Look for time mentions
         import re
-        time_pattern = r'(\d{1,2}):(\d{2})|(\d{1,2})\s*(am|pm)'
+        time_pattern = r'(\d{1,2}):(\d{2})|(\d{1,2})\s*(am|pm|AM|PM)'
         time_match = re.search(time_pattern, message.lower())
         if time_match:
             if time_match.group(1) and time_match.group(2):
-                params["schedule_time"] = f"{time_match.group(1)}:{time_match.group(2)}"
+                # Format: HH:MM
+                hour = int(time_match.group(1))
+                minute = int(time_match.group(2))
+                params["schedule_time"] = f"{hour:02d}:{minute:02d}"
             elif time_match.group(3) and time_match.group(4):
+                # Format: H am/pm
                 hour = int(time_match.group(3))
-                if time_match.group(4) == "pm" and hour != 12:
+                period = time_match.group(4).lower()
+                if period == "pm" and hour != 12:
                     hour += 12
-                elif time_match.group(4) == "am" and hour == 12:
+                elif period == "am" and hour == 12:
                     hour = 0
                 params["schedule_time"] = f"{hour:02d}:00"
         
@@ -249,34 +365,90 @@ class RoutineMCPClient:
         return params
     
     def _extract_activity_name(self, message: str) -> Dict[str, Any]:
-        """Extract activity name from completion message."""
-        message_lower = message.lower()
+        """Extract activity name from completion message using intelligent mapping for special kids."""
+        message_lower = message.lower().strip()
         
-        # Common activity keywords that we prioritize
-        activity_keywords = [
-            "breakfast", "lunch", "dinner", "snack", "eating", "eat",
-            "brush", "teeth", "brushing", "shower", "bath", "bathing", "wash", "washing",
-            "homework", "reading", "read", "study", "studying", 
-            "play", "playing", "exercise", "walk", "walking",
-            "medication", "medicine", "vitamin", "vitamins",
-            "dress", "dressing", "clothes", "cleanup", "clean",
-            "bedtime", "sleep", "nap", "wake", "morning"
-        ]
+        # Enhanced activity mapping for natural phrases special kids use
+        activity_mappings = {
+            # Morning routine activities
+            "wake up": ["woke up", "wake up", "got up", "getting up", "awake", "morning"],
+            "brush teeth": ["brush", "brushing", "teeth", "brushed teeth", "brushed", "tooth", "toothbrush", "clean teeth"],
+            "wash face": ["wash face", "washed face", "washing face", "face clean", "clean face", "face", "wash"],
+            "wash hands": ["wash hands", "washed hands", "washing hands", "hands clean", "clean hands", "hands"],
+            "get dressed": ["got dressed", "get dressed", "getting dressed", "put on clothes", "clothes on", "dressed", "dress", "dressing", "clothes"],
+            "eat breakfast": ["ate breakfast", "eat breakfast", "eating breakfast", "breakfast", "morning food", "ate", "food"],
+            "take shower": ["took shower", "take shower", "taking shower", "shower", "showered", "bath", "bathing", "took bath"],
+            
+            # Daily activities
+            "do homework": ["did homework", "do homework", "doing homework", "homework", "school work", "study", "studying", "read", "reading"],
+            "play": ["played", "play", "playing", "game", "games", "fun", "toy", "toys"],
+            "clean room": ["cleaned room", "clean room", "cleaning room", "room clean", "tidy", "tidying", "cleanup", "clean up"],
+            "eat lunch": ["ate lunch", "eat lunch", "eating lunch", "lunch", "lunch time", "noon food"],
+            "eat dinner": ["ate dinner", "eat dinner", "eating dinner", "dinner", "dinner time", "evening food", "supper"],
+            "take medicine": ["took medicine", "take medicine", "taking medicine", "medicine", "medication", "pills", "vitamin"],
+            
+            # Evening routine activities
+            "put on pajamas": ["put on pajamas", "pajamas on", "pjs", "nightclothes", "sleeping clothes", "bedtime clothes"],
+            "read book": ["read book", "reading book", "read", "book", "story", "story time", "reading time"],
+            "go to bed": ["went to bed", "go to bed", "going to bed", "bed", "bedtime", "sleep", "sleeping", "sleepy"],
+            
+            # Personal care
+            "comb hair": ["combed hair", "comb hair", "combing hair", "hair", "brush hair", "fix hair"],
+            "put on shoes": ["put on shoes", "shoes on", "wearing shoes", "shoes", "socks", "socks on"],
+            "use bathroom": ["used bathroom", "use bathroom", "bathroom", "potty", "toilet", "pee", "poop"],
+            
+            # Learning activities
+            "practice writing": ["practiced writing", "practice writing", "writing", "write", "wrote", "letters", "words"],
+            "do math": ["did math", "do math", "doing math", "math", "numbers", "counting", "count"],
+            "art time": ["did art", "do art", "art", "drawing", "draw", "coloring", "color", "paint", "painting"],
+            "music time": ["music", "singing", "sing", "song", "dance", "dancing", "listen", "listening"],
+            
+            # Physical activities
+            "exercise": ["exercised", "exercise", "exercising", "workout", "move", "moving", "walk", "walking"],
+            "go outside": ["went outside", "go outside", "going outside", "outside", "park", "playground", "fresh air"],
+            
+            # Chores and responsibilities
+            "feed pet": ["fed pet", "feed pet", "feeding pet", "dog", "cat", "fish", "pet", "animal"],
+            "water plants": ["watered plants", "water plants", "watering plants", "plants", "flowers", "garden"],
+            "help cook": ["helped cook", "help cook", "helping cook", "cooking", "cook", "kitchen", "recipe"],
+            
+            # Social activities
+            "call family": ["called family", "call family", "calling family", "phone", "video call", "talk", "family"],
+            "play with friends": ["played with friends", "play with friends", "friends", "friend", "social", "together"],
+            
+            # Self-care and calming
+            "deep breathing": ["deep breathing", "breathing", "breathe", "calm", "relax", "meditation"],
+            "quiet time": ["quiet time", "quiet", "rest", "resting", "peaceful", "still", "calm down"],
+            "sensory break": ["sensory break", "break", "overwhelmed", "too much", "need space", "alone time"]
+        }
         
-        # Look for activity keywords first (highest priority)
-        words = message.split()
-        for word in words:
-            word_clean = word.lower().strip('.,!?-')
-            if word_clean in activity_keywords:
-                return {"activity_name": word_clean}
+        # First, try exact phrase matching
+        for activity, phrases in activity_mappings.items():
+            for phrase in phrases:
+                if phrase in message_lower:
+                    return {"activity_name": activity}
         
-        # Look for common completion phrases with better extraction
+        # Then try word-based matching for more flexible recognition
+        words = message_lower.split()
+        for activity, phrases in activity_mappings.items():
+            for phrase in phrases:
+                phrase_words = phrase.split()
+                # Check if all words from the phrase appear in the message
+                if len(phrase_words) == 1:
+                    if phrase_words[0] in words:
+                        return {"activity_name": activity}
+                elif len(phrase_words) == 2:
+                    if all(word in message_lower for word in phrase_words):
+                        return {"activity_name": activity}
+        
+        # Fallback: Look for any completion patterns and extract what follows
         completion_patterns = [
-            ("done with", 8),
-            ("finished", 8), 
+            ("done with", 9),
+            ("finished with", 13),
             ("completed", 9),
             ("did", 3),
-            ("done", 4)
+            ("done", 4),
+            ("finished", 8)
         ]
         
         for pattern, pattern_len in completion_patterns:
@@ -303,11 +475,10 @@ class RoutineMCPClient:
                         if activity_clean not in skip_words:
                             return {"activity_name": activity_name}
         
-        # Look for multi-word activities (like "brush teeth")
-        for i in range(len(words) - 1):
-            two_word = f"{words[i]} {words[i+1]}".lower().strip('.,!?')
-            if any(keyword in two_word for keyword in ["brush teeth", "wash hands", "get dressed", "clean up"]):
-                return {"activity_name": two_word}
+        # If no specific activity found, but message indicates completion, return the whole message as context
+        completion_indicators = ["done", "finished", "completed", "did", "good", "ready", "all clean"]
+        if any(indicator in message_lower for indicator in completion_indicators):
+            return {"activity_name": message.strip(), "general_completion": True}
         
         return {}
     

@@ -64,6 +64,34 @@ A revolutionary, magical AI companion specially crafted for special needs childr
    python -c "import asyncio; from database.db_manager import DatabaseManager; asyncio.run(DatabaseManager().initialize())"
    ```
 
+6. **Start the application**
+   ```bash
+   python main.py
+   ```
+
+7. **Try the demo** ✨
+   ```bash
+   python demo_fresh_setup.py
+   ```
+
+The application will be available at `http://localhost:8000`
+
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your OpenAI API key
+   ```
+
+5. **Initialize the database**
+   ```bash
+   python -c "import asyncio; from database.db_manager import DatabaseManager; asyncio.run(DatabaseManager().initialize())"
+   ```
+
 ## Usage
 
 ### Starting the Application
@@ -101,6 +129,8 @@ The application will be available at `http://localhost:8000`
 - **Interactive Routine Sessions**: Start routines through chat with step-by-step guidance
 - **Progress Tracking**: Real-time activity completion with encouraging feedback
 - **MCP Integration**: Advanced Model Context Protocol for seamless chat-based routine management
+- **Current Activity Display**: Always shows the current activity name in all communications during active routines
+- **General Phrase Recognition**: Understands natural expressions like "I'm done", "finished", or "completed that"
 
 **Example Interactions:**
 ```
@@ -112,9 +142,15 @@ AI: 🌈 Here are all your wonderful routines! ✨
 
 Child: "Start my morning routine"
 AI: 🌈 Let's start your 'Morning Routine'! This is going to be wonderful! ✨
+Current Activity: Brushing Teeth
 
-Child: "I finished brushing teeth"
-AI: 🎉 Amazing job! You're doing wonderful! What's next is getting dressed! ✨
+Child: "I'm done" or "finished that"
+AI: 🎉 Amazing job completing 'Brushing Teeth'! You're doing wonderful! 
+Current Activity: Getting Dressed ✨
+
+Child: "all done"
+AI: 🎉 Fantastic work on 'Getting Dressed'! What a superstar! 
+Current Activity: Eating Breakfast ✨
 ```
 
 #### Progress Tracking
@@ -175,9 +211,15 @@ Rainbow Bridge uses the **Model Context Protocol (MCP)** for seamless integratio
 1. **create_routine**: Natural language routine creation
 2. **get_child_routines**: Retrieve and display user routines  
 3. **start_routine**: Begin routine sessions with guidance
-4. **complete_activity**: Track progress and show next steps
+4. **complete_activity**: Track progress and show next steps with current activity context
 5. **get_routine_suggestions**: AI-powered activity recommendations
 6. **update_routine**: Modify existing routine parameters
+
+### Enhanced Features ✨
+- **Current Activity Context**: Always displays the current activity name in communications during active routines
+- **Natural Language Intent Detection**: Recognizes general completion phrases like "I'm done", "finished", "all done"
+- **Intelligent Activity Extraction**: Uses fuzzy matching to understand activity references in natural language
+- **Real-time Progress Updates**: Immediate feedback and next activity guidance with visual cues
 
 ### Extensibility
 The MCP architecture makes it easy to add new features:
@@ -185,6 +227,26 @@ The MCP architecture makes it easy to add new features:
 - Add new tools to existing servers
 - Integrate with external services and APIs
 - Maintain consistent child-friendly interaction patterns
+
+## Testing & Demo Scripts
+
+### Available Demo Scripts
+- **`demo_fresh_setup.py`**: Complete demo showcasing current activity display and natural language completion
+- **`test_final_general.py`**: Tests general phrase recognition and completion detection
+- **`test_current_activity_display.py`**: Validates current activity context in all communications
+- **`debug_completion_trace.py`**: Debug script for tracing completion workflow
+
+### Running Tests
+```bash
+# Run the comprehensive demo
+python demo_fresh_setup.py
+
+# Test general phrase recognition
+python test_final_general.py
+
+# Test current activity display
+python test_current_activity_display.py
+```
 
 ## Contributing
 
@@ -232,6 +294,7 @@ For support, please contact [your-email@example.com] or create an issue in the r
 - **v1.0.0**: Initial release with core features
 - **v1.1.0**: Enhanced visual communication tools
 - **v1.2.0**: Advanced progress tracking
+- **v1.3.0**: Current activity display and natural language completion detection
 - **v2.0.0**: Mobile app integration (planned)
 
 ## Technical Details

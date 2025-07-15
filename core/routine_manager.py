@@ -90,6 +90,47 @@ class RoutineManager:
                     "sensory_considerations": ["soft fabrics", "loose fitting", "no scratchy tags"]
                 }
             ],
+            "bedtime": [
+                {
+                    "name": "Evening Wind Down",
+                    "duration_minutes": 15,
+                    "description": "Quiet activities to prepare for bed",
+                    "visual_cue": "moon",
+                    "instructions": [
+                        "Dim the lights",
+                        "Put away toys",
+                        "Choose a quiet activity",
+                        "Speak in soft voices"
+                    ],
+                    "sensory_considerations": ["low lighting", "quiet sounds"]
+                },
+                {
+                    "name": "Bedtime Hygiene",
+                    "duration_minutes": 20,
+                    "description": "Brush teeth and get ready for bed",
+                    "visual_cue": "toothbrush",
+                    "instructions": [
+                        "Brush teeth carefully",
+                        "Wash face and hands",
+                        "Use the bathroom",
+                        "Put on pajamas"
+                    ],
+                    "sensory_considerations": ["soft toothbrush", "lukewarm water"]
+                },
+                {
+                    "name": "Bedtime Story",
+                    "duration_minutes": 15,
+                    "description": "Read a calming bedtime story",
+                    "visual_cue": "book",
+                    "instructions": [
+                        "Choose a familiar story",
+                        "Get comfortable in bed",
+                        "Read with soft voice",
+                        "Talk about the story"
+                    ],
+                    "sensory_considerations": ["comfortable bedding", "dim reading light"]
+                }
+            ],
             "learning": [
                 {
                     "name": "Visual Learning Time",
@@ -144,6 +185,21 @@ class RoutineManager:
                         "Stay nearby for comfort"
                     ],
                     "sensory_considerations": ["minimal stimulation", "comfort items"]
+                }
+            ],
+            "custom": [
+                {
+                    "name": "Free Play Time",
+                    "duration_minutes": 20,
+                    "description": "Open-ended play with favorite activities",
+                    "visual_cue": "play",
+                    "instructions": [
+                        "Choose favorite activities",
+                        "Allow free exploration",
+                        "Join in if invited",
+                        "Follow child's lead"
+                    ],
+                    "sensory_considerations": ["child's preferences", "safe environment"]
                 }
             ]
         }
@@ -509,39 +565,105 @@ class RoutineManager:
             return None
     
     def _fuzzy_match_activity(self, input_name: str, activity_name: str) -> bool:
-        """Fuzzy match activity names to handle variations."""
-        # Define common activity mappings
+        """Enhanced fuzzy match activity names to handle variations and general phrases."""
+        
+        # Enhanced activity mappings that match the MCP client mappings
         activity_mappings = {
-            "teeth": ["brush teeth", "brushing teeth", "dental care"],
-            "brush": ["brush teeth", "brushing teeth", "dental care"],
-            "breakfast": ["eat breakfast", "morning meal", "morning snack"],
-            "lunch": ["eat lunch", "midday meal", "afternoon meal"],
-            "dinner": ["eat dinner", "evening meal", "supper"],
-            "shower": ["take shower", "showering", "bathing"],
-            "bath": ["take bath", "bathing", "showering"],
-            "homework": ["do homework", "study", "schoolwork"],
-            "play": ["playtime", "free play", "playing"],
-            "exercise": ["physical activity", "workout", "movement"],
-            "medicine": ["medication", "take medicine", "pills"],
-            "vitamin": ["vitamins", "supplements", "take vitamins"]
+            # Wake up variations
+            "wake up": ["wake", "woke", "awake", "morning", "got up", "get up", "wake up gently", "morning wake"],
+            
+            # Teeth/brushing variations  
+            "brush teeth": ["teeth", "brush", "brushing", "tooth", "toothbrush", "clean teeth", "dental"],
+            
+            # Getting dressed variations
+            "get dressed": ["dressed", "dress", "clothes", "clothing", "shirt", "pants", "outfit", "getting dressed"],
+            
+            # Eating variations
+            "eat breakfast": ["breakfast", "morning food", "ate", "eating", "morning meal"],
+            "eat lunch": ["lunch", "midday meal", "noon food", "afternoon meal"],
+            "eat dinner": ["dinner", "evening meal", "supper", "night food"],
+            
+            # Washing variations
+            "wash hands": ["hands", "wash hands", "clean hands", "hand washing"],
+            "wash face": ["face", "wash face", "clean face", "face washing"],
+            "take shower": ["shower", "showering", "bath", "bathing", "wash", "cleaning"],
+            
+            # Other activities
+            "do homework": ["homework", "study", "schoolwork", "reading", "book"],
+            "play": ["playing", "game", "toy", "fun", "playtime"],
+            "clean room": ["clean", "cleanup", "tidy", "organize", "room"],
+            "put on shoes": ["shoes", "socks", "footwear"],
+            "put on pajamas": ["pajamas", "pjs", "nightclothes", "sleeping clothes"],
+            "go to bed": ["bed", "sleep", "sleeping", "bedtime", "sleepy"],
+            "comb hair": ["hair", "comb", "brush hair"],
+            "take medicine": ["medicine", "medication", "pills", "vitamin"]
         }
         
-        # Check if input matches any mapped activities
-        for key, variations in activity_mappings.items():
-            if key in input_name:
-                if any(var.lower() in activity_name.lower() for var in variations):
+        input_lower = input_name.lower().strip()
+        activity_lower = activity_name.lower().strip()
+        
+        # Direct string matching
+        if input_lower == activity_lower:
+            return True
+        
+        # Check if input is contained in activity or vice versa
+        if input_lower in activity_lower or activity_lower in input_lower:
+            return True
+        
+        # Check enhanced mappings - both directions
+        for canonical_activity, variations in activity_mappings.items():
+            # If the routine activity matches canonical form
+            if canonical_activity in activity_lower:
+                # Check if input matches any variation
+                if any(var in input_lower for var in variations):
                     return True
-            if key in activity_name:
-                if any(var.lower() in input_name.lower() for var in variations):
+                if input_lower in variations:
+                    return True
+            
+            # If input matches canonical form
+            if canonical_activity in input_lower:
+                # Check if activity matches any variation  
+                if any(var in activity_lower for var in variations):
                     return True
         
-        # Check for word overlap (at least 50% common words)
-        input_words = set(input_name.split())
-        activity_words = set(activity_name.split())
+        # Check if input matches any variation and activity matches canonical
+        for canonical_activity, variations in activity_mappings.items():
+            if any(var in input_lower for var in variations):
+                if canonical_activity in activity_lower:
+                    return True
+        
+        # Word-based matching for more flexibility
+        input_words = set(input_lower.split())
+        activity_words = set(activity_lower.split())
         
         if len(input_words) > 0 and len(activity_words) > 0:
             common_words = input_words.intersection(activity_words)
-            overlap_ratio = len(common_words) / min(len(input_words), len(activity_words))
-            return overlap_ratio >= 0.5
+            # Lower threshold for shorter phrases
+            min_length = min(len(input_words), len(activity_words))
+            threshold = 0.5 if min_length > 1 else 0.8
+            overlap_ratio = len(common_words) / min_length
+            if overlap_ratio >= threshold:
+                return True
+        
+        # Special case: single word matching for key activity words
+        key_words = {
+            "teeth": "brush teeth",
+            "breakfast": "eat breakfast", 
+            "lunch": "eat lunch",
+            "dinner": "eat dinner",
+            "dressed": "get dressed",
+            "clothes": "get dressed",
+            "shower": "take shower",
+            "bath": "take shower",
+            "homework": "do homework",
+            "sleep": "go to bed",
+            "bed": "go to bed"
+        }
+        
+        for key_word, target_activity in key_words.items():
+            if key_word in input_lower and target_activity in activity_lower:
+                return True
+            if key_word in activity_lower and target_activity in input_lower:
+                return True
         
         return False

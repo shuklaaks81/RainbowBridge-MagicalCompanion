@@ -348,18 +348,40 @@ async def get_routine_status(routine_id: int, child_id: int = None):
         if not routine_data:
             return JSONResponse(content={"error": "Routine not found"}, status_code=404)
         
-        # Get any active session data (you might need to implement this in routine_manager)
-        # For now, return basic routine information
+        # Calculate actual completion status
+        activities = routine_data.get("activities", [])
+        total_activities = len(activities)
+        completed_count = sum(1 for activity in activities if activity.get("completed", False))
+        progress_percentage = round((completed_count / total_activities) * 100) if total_activities > 0 else 0
+        
+        # Determine current activity
+        current_activity = None
+        for activity in activities:
+            if not activity.get("completed", False):
+                current_activity = activity.get("name", "Unknown activity")
+                break
+        
+        # Determine status
+        if progress_percentage >= 100:
+            status = "completed"
+            mcp_message = f"🌈 Congratulations! You completed your entire '{routine_data.get('name', 'routine')}'! 🎉✨"
+        elif completed_count > 0:
+            status = "in_progress"
+            mcp_message = f"You're doing great! {completed_count} of {total_activities} activities done! 🌟"
+        else:
+            status = "ready"
+            mcp_message = f"Your {routine_data.get('name', 'routine')} is ready to start! 🌟"
         
         response_data = {
             "routine_id": routine_id,
             "name": routine_data.get("name"),
-            "activities": routine_data.get("activities", []),
-            "total_activities": len(routine_data.get("activities", [])),
-            "status": "ready",  # Could be: ready, in_progress, completed
-            "progress": 0,  # Percentage complete
-            "current_activity": None,
-            "mcp_message": f"Your {routine_data.get('name', 'routine')} is ready to start! 🌟"
+            "activities": activities,
+            "total_activities": total_activities,
+            "completed_activities": completed_count,
+            "status": status,
+            "progress_percentage": progress_percentage,
+            "current_activity": current_activity,
+            "mcp_message": mcp_message
         }
         
         return JSONResponse(content=response_data)
@@ -382,21 +404,38 @@ async def complete_routine_activity(
         success = await routine_manager.complete_activity(routine_id, activity_name)
         
         if success:
-            # Get updated routine status
+            # Get updated routine status with actual completion data
             routine_data = await db_manager.get_routine(routine_id)
             activities = routine_data.get("activities", [])
             
-            # Calculate progress
+            # Calculate real progress based on completed activities
             total_activities = len(activities)
-            # This is simplified - you'd need proper session tracking for real progress
-            progress = 50  # Placeholder
+            completed_count = sum(1 for activity in activities if activity.get("completed", False))
+            progress = round((completed_count / total_activities) * 100) if total_activities > 0 else 0
+            
+            # Get next activity if any
+            next_activity = None
+            for i, activity in enumerate(activities):
+                if not activity.get("completed", False):
+                    next_activity = activity.get("name", "Unknown activity")
+                    break
+            
+            # Create response with proper progress
+            if progress >= 100:
+                mcp_message = f"🌈 Amazing! You completed your entire routine! All {total_activities} activities done! 🎉✨"
+            elif next_activity:
+                mcp_message = f"🎉 Great job completing '{activity_name}'! Next up: {next_activity} 🌟"
+            else:
+                mcp_message = f"🎉 Wonderful! You completed '{activity_name}'! Keep going! ⭐"
             
             response_data = {
                 "success": True,
                 "activity_completed": activity_name,
                 "progress": progress,
                 "total_activities": total_activities,
-                "mcp_message": f"🎉 Awesome job! You completed: {activity_name}. Keep going! ⭐"
+                "completed_activities": completed_count,
+                "next_activity": next_activity,
+                "mcp_message": mcp_message
             }
         else:
             response_data = {
@@ -612,3 +651,21 @@ async def view_progress_report(request: Request, child_id: int):
     except Exception as e:
         logger.error(f"Progress report error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to load progress report")
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    
+    # Get configuration from environment
+    host = os.getenv("HOST", "localhost")
+    port = int(os.getenv("PORT", "8000"))
+    reload = os.getenv("RELOAD", "True").lower() == "true"
+    
+    logger.info(f"Starting server on {host}:{port}")
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info"
+    )

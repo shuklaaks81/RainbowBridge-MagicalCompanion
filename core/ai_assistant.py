@@ -8,6 +8,8 @@ specifically configured for autism spectrum communication patterns.
 import os
 import openai
 import json
+import random
+import re
 import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -197,6 +199,11 @@ class SpecialKidsAI:
     ) -> Dict[str, Any]:
         """Process text-based communication using local or cloud LLM."""
         try:
+            # Get current activity context first to enhance all communications
+            current_activity_context = None
+            if self.routine_mcp_client:
+                current_activity_context = await self.routine_mcp_client._get_current_activity_context(child_id)
+            
             # First check if this is a routine-related request
             if self.routine_mcp_client:
                 logger.info(f"Checking routine intent for message: '{message}' (child_id: {child_id})")
@@ -215,7 +222,8 @@ class SpecialKidsAI:
                             "suggested_actions": self._get_routine_actions(routine_intent["intent"]),
                             "communication_type": "text",
                             "llm_source": "mcp_routine",
-                            "routine_action": routine_intent["intent"]
+                            "routine_action": routine_intent["intent"],
+                            "current_activity_context": current_activity_context
                         }
                 else:
                     logger.info(f"No routine intent detected for: '{message}'")
@@ -224,7 +232,7 @@ class SpecialKidsAI:
             communication_intent = await self._detect_communication_intent(message, child_id)
             if communication_intent:
                 logger.info(f"Detected communication intent: {communication_intent['primary_intent']['intent']}")
-                intent_response = await self._generate_intent_based_response(communication_intent, message)
+                intent_response = await self._generate_intent_based_response(communication_intent, message, current_activity_context)
                 return intent_response
             
             ai_text = ""
@@ -260,6 +268,19 @@ class SpecialKidsAI:
             visual_cues = self._suggest_visual_cues(message, ai_text)
             actions = self._suggest_actions(message, ai_text)
             
+            # Add current activity context to the response if available
+            if current_activity_context and current_activity_context.get("current_activity"):
+                current_activity = current_activity_context["current_activity"]
+                routine_name = current_activity_context.get("routine_name", "your routine")
+                progress = current_activity_context.get("progress_percentage", 0)
+                
+                # Enhance AI response with current activity information
+                activity_context = f"\n\n🎯 **Current Activity:** {current_activity['name']}\n"
+                activity_context += f"📝 {current_activity.get('description', 'Working on this activity')}\n"
+                activity_context += f"🌈 Routine: {routine_name} ({progress}% complete)"
+                
+                ai_text += activity_context
+            
             return {
                 "text": ai_text,
                 "visual_cues": visual_cues,
@@ -267,7 +288,8 @@ class SpecialKidsAI:
                 "confidence": 0.85,
                 "suggested_actions": actions,
                 "communication_type": "text",
-                "llm_source": "local" if self.use_local_mode else ("azure_openai" if self.use_azure else "openai")
+                "llm_source": "local" if self.use_local_mode else ("azure_openai" if self.use_azure else "openai"),
+                "current_activity_context": current_activity_context
             }
         
         except Exception as e:
@@ -805,7 +827,6 @@ Choose a peaceful activity you enjoy
     
     def _parse_smart_schedule(self, schedule_text: str) -> List[Dict[str, Any]]:
         """Parse AI-generated smart schedule into structured activities."""
-        import re
         activities = []
         lines = schedule_text.split('\n')
         
@@ -881,7 +902,6 @@ Choose a peaceful activity you enjoy
     
     def _simple_parse_activities(self, text: str) -> List[Dict[str, Any]]:
         """Simple backup parsing method."""
-        import re
         activities = []
         
         # Look for any lines that might be activities
@@ -1193,7 +1213,7 @@ Choose a peaceful activity you enjoy
         
         return None
 
-    async def _generate_intent_based_response(self, intent_data: Dict[str, Any], message: str) -> Dict[str, Any]:
+    async def _generate_intent_based_response(self, intent_data: Dict[str, Any], message: str, current_activity_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate a response based on detected communication intent."""
         primary_intent = intent_data["primary_intent"]
         intent_type = primary_intent["intent"]
@@ -1245,11 +1265,23 @@ Choose a peaceful activity you enjoy
         
         # Select appropriate response template
         templates = response_templates.get(response_type, response_templates["social_interaction"])
-        import random
         selected_template = random.choice(templates)
         
         # Personalize the response based on the message content
         personalized_response = self._personalize_response(selected_template, message, primary_intent)
+        
+        # Add current activity context to the response if available
+        if current_activity_context and current_activity_context.get("current_activity"):
+            current_activity = current_activity_context["current_activity"]
+            routine_name = current_activity_context.get("routine_name", "your routine")
+            progress = current_activity_context.get("progress_percentage", 0)
+            
+            # Enhance response with current activity information
+            activity_context = f"\n\n🎯 **Current Activity:** {current_activity['name']}\n"
+            activity_context += f"📝 {current_activity.get('description', 'Working on this activity')}\n"
+            activity_context += f"🌈 Routine: {routine_name} ({progress}% complete)"
+            
+            personalized_response += activity_context
         
         return {
             "text": personalized_response,
@@ -1260,7 +1292,8 @@ Choose a peaceful activity you enjoy
             "communication_type": "text",
             "intent_detected": intent_type,
             "response_type": response_type,
-            "llm_source": "intent_based"
+            "llm_source": "intent_based",
+            "current_activity_context": current_activity_context
         }
 
     def _personalize_response(self, template: str, message: str, intent: Dict[str, Any]) -> str:
@@ -1277,6 +1310,33 @@ Choose a peaceful activity you enjoy
             needs = ["help", "food", "water", "bathroom", "rest", "break"]
             detected_need = next((need for need in needs if need in message_lower), "something")
             template = template.replace("{need}", detected_need)
+        
+        # For achievement sharing, extract what they accomplished from natural language
+        if intent.get("intent") == "achievement_sharing":
+            # Enhanced activity recognition from general statements
+            activities = {
+                "getting dressed": ["dressed", "clothes", "shirt", "pants", "socks", "shoes"],
+                "eating": ["ate", "breakfast", "lunch", "dinner", "food", "hungry"],
+                "brushing teeth": ["brush", "teeth", "tooth", "clean"],
+                "washing": ["wash", "clean", "hands", "face", "bath", "shower"],
+                "waking up": ["wake", "woke", "up", "morning", "awake"],
+                "playing": ["play", "game", "toy", "fun"],
+                "homework": ["homework", "study", "read", "book", "school"],
+                "cleaning": ["clean", "tidy", "organize", "room"],
+                "going to bed": ["bed", "sleep", "tired", "bedtime", "pajamas"]
+            }
+            
+            detected_activity = "something wonderful"
+            for activity, keywords in activities.items():
+                if any(keyword in message_lower for keyword in keywords):
+                    detected_activity = activity
+                    break
+            
+            # Make the response more specific and encouraging
+            if "what a fantastic achievement" in template.lower():
+                return f"🌟 Wow! You did such a great job with {detected_activity}! That's a big accomplishment! I'm so proud of how you're growing and learning! 🎉"
+            elif "look at what you accomplished" in template.lower():
+                return f"🎉 Look at you go! {detected_activity.title()} - that's amazing! You're getting so good at taking care of yourself! 🌈"
         
         return template
 

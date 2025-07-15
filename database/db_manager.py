@@ -496,12 +496,13 @@ class DatabaseManager:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("""
                     INSERT INTO activity_logs (
-                        child_id, activity_name, routine_id, completed_at
-                    ) VALUES (?, ?, ?, ?)
+                        child_id, activity_name, routine_id, action, timestamp
+                    ) VALUES (?, ?, ?, ?, ?)
                 """, (
                     child_id,
                     activity_name,
                     routine_id,
+                    "completed",
                     completed_at or datetime.now()
                 ))
                 

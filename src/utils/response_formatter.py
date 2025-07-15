@@ -27,7 +27,7 @@ class ResponseFormatter:
         ai_response: str, 
         child: Child, 
         context: Dict[str, Any],
-        routine_action: Optional[str] = None
+        routine_action_result: Optional[Dict[str, Any]] = None
     ) -> str:
         """Format an AI response with appropriate enhancements."""
         
@@ -40,10 +40,16 @@ class ResponseFormatter:
                 formatted_response, context
             )
         
-        # Enhance completion responses
-        if routine_action == 'complete_activity':
-            formatted_response = self._enhance_completion_response(
-                formatted_response, context
+        # Enhance completion responses with dynamic content
+        if routine_action_result and routine_action_result.get('action') == 'complete_activity':
+            formatted_response = self._enhance_completion_response_dynamic(
+                formatted_response, routine_action_result, context
+            )
+        
+        # Enhance routine start responses
+        elif routine_action_result and routine_action_result.get('action') == 'start_routine':
+            formatted_response = self._enhance_start_routine_response(
+                formatted_response, routine_action_result
             )
         
         # Add visual enhancements
@@ -123,6 +129,152 @@ class ResponseFormatter:
         
         return response
     
+    def _enhance_completion_response_dynamic(
+        self, 
+        response: str, 
+        action_result: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> str:
+        """Enhance completion responses with dynamic, contextual content."""
+        
+        import random
+        
+        # Extract information from action result
+        completed_activity = action_result.get('result', {}).get('completed_activity', {})
+        next_activity = action_result.get('result', {}).get('next_activity')
+        progress = action_result.get('result', {}).get('progress', {})
+        routine_completed = action_result.get('result', {}).get('routine_completed', False)
+        
+        activity_name = completed_activity.get('name', 'activity')
+        
+        # Dynamic celebration messages based on progress
+        if routine_completed:
+            celebrations = [
+                f"🎉 WOW! You completed your entire routine! You're absolutely amazing! 🌟",
+                f"✨ FANTASTIC! All done with your routine! You're a true champion! 🏆",
+                f"🌈 INCREDIBLE! You finished everything! What a superstar! ⭐",
+                f"🎯 AMAZING! Routine complete! You should be so proud! 💫"
+            ]
+        elif progress.get('percentage', 0) >= 75:
+            celebrations = [
+                f"🎉 Awesome! You completed '{activity_name}'! Almost there! 🌟",
+                f"✨ Fantastic work on '{activity_name}'! You're so close to finishing! 🎯",
+                f"🌈 Great job with '{activity_name}'! Just a few more to go! 💪",
+                f"🎨 Beautiful work on '{activity_name}'! You're doing amazingly! ⭐"
+            ]
+        elif progress.get('percentage', 0) >= 50:
+            celebrations = [
+                f"🎉 Well done on '{activity_name}'! You're halfway there! 🌟",
+                f"✨ Great job with '{activity_name}'! Keep up the awesome work! 🎯",
+                f"🌈 Nice work on '{activity_name}'! You're making great progress! 💫",
+                f"🦄 Wonderful job on '{activity_name}'! You're doing so well! ⭐"
+            ]
+        else:
+            celebrations = [
+                f"🎉 Great start with '{activity_name}'! You're off to a wonderful beginning! 🌟",
+                f"✨ Nice work on '{activity_name}'! Every step counts! 🎯",
+                f"🌈 Good job with '{activity_name}'! You're building momentum! 💫",
+                f"🎨 Well done on '{activity_name}'! Keep going! ⭐"
+            ]
+        
+        # Choose a random celebration
+        celebration = random.choice(celebrations)
+        
+        # Add progress information
+        progress_text = ""
+        if progress:
+            completed = progress.get('completed_count', 0)
+            total = progress.get('total_count', 0)
+            percentage = progress.get('percentage', 0)
+            
+            if not routine_completed:
+                progress_text = f"\n📊 Progress: {completed}/{total} activities done ({percentage}%)"
+                
+                # Add next activity information
+                if next_activity:
+                    next_name = next_activity.get('name')
+                    progress_text += f"\n🎯 Up next: {next_name}"
+                    
+                    # Add encouraging transition
+                    transitions = [
+                        "Let's keep the momentum going!",
+                        "Ready for the next adventure?",
+                        "You've got this!",
+                        "On to the next exciting step!"
+                    ]
+                    progress_text += f" {random.choice(transitions)}"
+        
+        # Combine celebration with progress
+        enhanced_response = celebration
+        if progress_text:
+            enhanced_response += progress_text
+        
+        # Add extra encouragement if struggling (low completion rate)
+        if progress.get('percentage', 0) < 25 and progress.get('completed_count', 0) > 0:
+            encouragements = [
+                "\n💪 Remember, every small step is a big win!",
+                "\n✨ You're doing better than you think!",
+                "\n🌟 Take your time - you're amazing!",
+                "\n🌈 Progress is progress, no matter how small!"
+            ]
+            enhanced_response += random.choice(encouragements)
+        
+        return enhanced_response
+    
+    def _enhance_start_routine_response(
+        self, 
+        response: str, 
+        action_result: Dict[str, Any]
+    ) -> str:
+        """Enhance responses for routine starts with dynamic content."""
+        
+        import random
+        
+        # Extract routine information
+        result = action_result.get('result', {})
+        routine_name = result.get('routine_name', 'routine')
+        first_activity = result.get('first_activity', {})
+        total_activities = result.get('total_activities', 0)
+        
+        # Dynamic start messages
+        start_messages = [
+            f"🌟 Let's begin your {routine_name}! Ready for an awesome adventure?",
+            f"✨ Time to start your {routine_name}! You've got this!",
+            f"🌈 Your {routine_name} is starting! Let's make it magical!",
+            f"🎯 {routine_name} time! Ready to be amazing?"
+        ]
+        
+        enhanced_response = random.choice(start_messages)
+        
+        # Add first activity information
+        if first_activity:
+            activity_name = first_activity.get('name')
+            enhanced_response += f"\n\n🎯 **First up:** {activity_name}"
+            
+            # Add motivational context
+            motivations = [
+                "Let's start strong!",
+                "You're going to do great!",
+                "Ready to shine?",
+                "Let's make this awesome!"
+            ]
+            enhanced_response += f" {random.choice(motivations)}"
+        
+        # Add total activities count
+        if total_activities > 0:
+            enhanced_response += f"\n📋 Today's plan: {total_activities} activities to explore together!"
+        
+        # Add encouraging start
+        start_encouragements = [
+            "\n💫 Take your time and enjoy each step!",
+            "\n🌟 Remember, you're amazing just as you are!",
+            "\n✨ Let's have fun and learn together!",
+            "\n🦄 Ready to create some magic?"
+        ]
+        enhanced_response += random.choice(start_encouragements)
+        
+        return enhanced_response
+
     def _add_visual_enhancements(self, response: str) -> str:
         """Add appropriate visual enhancements to the response."""
         

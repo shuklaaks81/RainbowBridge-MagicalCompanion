@@ -76,9 +76,10 @@ ROUTINE SUPPORT:
         self, 
         message: str, 
         mcp_result: Dict[str, Any], 
-        context: Dict[str, Any]
+        context: Dict[str, Any],
+        routine_action_result: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate a user prompt with message analysis."""
+        """Generate a user prompt with message analysis and routine action results."""
         
         prompt = f"Child's message: \"{message}\""
         
@@ -94,18 +95,70 @@ ROUTINE SUPPORT:
                 extracted_activity = mcp_result.get('extracted_activity')
                 if extracted_activity:
                     prompt += f"\n- Activity mentioned: {extracted_activity}"
-                    prompt += f"\n\nThe child has completed '{extracted_activity}'! Celebrate this achievement!"
             
             confidence = mcp_result.get('confidence', 0)
             if confidence > 0.5:
                 prompt += f"\n- Confidence: High ({confidence:.1f})"
         
+        # Add routine action results for dynamic responses
+        if routine_action_result:
+            action = routine_action_result.get('action')
+            
+            if action == 'complete_activity':
+                result = routine_action_result.get('result', {})
+                completed_activity = result.get('completed_activity', {})
+                next_activity = result.get('next_activity')
+                progress = result.get('progress', {})
+                
+                prompt += f"\n\nActivity Completion Success:"
+                prompt += f"\n- Completed: {completed_activity.get('name', 'Unknown')}"
+                prompt += f"\n- Progress: {progress.get('completed_count', 0)}/{progress.get('total_count', 0)} ({progress.get('percentage', 0)}%)"
+                
+                if result.get('routine_completed'):
+                    prompt += f"\n- 🎉 ENTIRE ROUTINE COMPLETED! Celebrate this amazing achievement!"
+                elif next_activity:
+                    prompt += f"\n- Next activity: {next_activity.get('name')}"
+                    prompt += f"\n- MUST include: 🎯 **Current Activity:** {next_activity.get('name')}"
+                
+                # Generate dynamic celebration message
+                completion_messages = [
+                    f"🌟 Fantastic work completing '{completed_activity.get('name')}'!",
+                    f"🎉 Amazing job on '{completed_activity.get('name')}'! You're doing wonderfully!",
+                    f"✨ Great success with '{completed_activity.get('name')}'! Keep shining!",
+                    f"🌈 Beautiful work on '{completed_activity.get('name')}'! You're a superstar!",
+                    f"🎯 Perfect completion of '{completed_activity.get('name')}'! So proud of you!"
+                ]
+                
+                import random
+                celebration = random.choice(completion_messages)
+                prompt += f"\n\nUse this celebration: {celebration}"
+                
+            elif action == 'start_routine':
+                result = routine_action_result.get('result', {})
+                routine = result.get('routine', {})
+                first_activity = result.get('first_activity')
+                
+                prompt += f"\n\nRoutine Started Successfully:"
+                prompt += f"\n- Routine: {routine.get('name')}"
+                prompt += f"\n- Total activities: {result.get('total_activities', 0)}"
+                
+                if first_activity:
+                    prompt += f"\n- First activity: {first_activity.get('name')}"
+                    prompt += f"\n- MUST include: 🎯 **Current Activity:** {first_activity.get('name')}"
+                
+                prompt += f"\n\nCreate an enthusiastic start message for this routine!"
+                
+            elif action in ['complete_activity_failed', 'start_routine_failed']:
+                error = routine_action_result.get('error', 'Unknown error')
+                prompt += f"\n\nAction Failed: {error}"
+                prompt += f"\n\nProvide helpful guidance while staying positive and encouraging."
+        
         # Add response instructions based on context
         if context.get('has_active_routine'):
             current_activity = context.get('current_activity')
-            if current_activity:
+            if current_activity and not routine_action_result:
                 prompt += f"\n\nResponse Requirements:"
-                prompt += f"\n- MUST include: 🎯 **Current Activity:** {current_activity['name']}"
+                prompt += f"\n- MUST include: 🎯 **Current Activity:** {current_activity.get('name')}"
                 prompt += f"\n- Encourage progress on current activity"
                 prompt += f"\n- Use magical, colorful language"
         

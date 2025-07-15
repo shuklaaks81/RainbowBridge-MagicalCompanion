@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2025-07-14
+
+### 🎯 Major Architecture Refactoring: Enhanced Activity & Routine Workflow
+
+This release addresses critical workflow issues and implements a comprehensive modular architecture for better scalability and user experience.
+
+### ✨ Key Improvements Fixed
+- **🎉 Dynamic Completion Messages**: Resolved monotonous completion messages with context-aware, progress-based celebrations
+- **📊 Visible Progress Tracking**: Fixed missing progress visibility with real-time updates and comprehensive analytics
+- **🔄 Robust Routine State Management**: Implemented proper state transitions and activity tracking
+
+### 🏗️ Architecture Refactoring
+- **Database Service Modularization**: Split 494-line database service into 4 specialized services:
+  - `DatabaseCore`: Core operations and table management (~150 lines)
+  - `RoutineManager`: Routine operations and state management (~200 lines)  
+  - `ProgressTracker`: Activity logging and analytics (~300 lines)
+  - `ChildManager`: Profile and related data management (~200 lines)
+
+- **MCP Client Refactoring**: Split 471-line MCP client into 3 focused components:
+  - `IntentDetector`: Enhanced intent detection with fuzzy matching (~200 lines)
+  - `RoutineActionHandler`: Robust routine actions and state transitions (~250 lines)
+  - `MCPClient`: Main coordinator with health monitoring (~150 lines)
+
+### 🎨 Enhanced Features
+- **Dynamic Response Formatter**: Added `_enhance_completion_response_dynamic()` and `_enhance_start_routine_response()`
+- **Contextual Celebrations**: Messages adapt based on progress percentage, next activities, and completion context
+- **Real-time Progress**: Accurate tracking visible throughout the application with streak information
+- **Comprehensive Analytics**: Daily breakdowns, milestone tracking, and streak calculations
+- **Enhanced Error Handling**: Improved system resilience and graceful degradation
+
+### 📚 Documentation
+- **ENHANCED_ARCHITECTURE.md**: Comprehensive architecture overview and migration guide
+- **Enhanced Testing**: Added validation scripts and comprehensive testing framework
+- **Improved Comments**: Better code documentation for maintainability
+
+### 🔧 Technical Improvements
+- **Backward Compatibility**: All existing APIs maintained while adding enhanced functionality
+- **Performance Optimization**: Specialized services for faster response times
+- **Better Testability**: Modular architecture enables better unit testing
+- **Scalable Foundation**: Prepared for future feature additions
+
 ## [2.0.0] - 2025-07-12
 
 ### 🌈 Major Release: MCP Integration & Advanced Routine Management

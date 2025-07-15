@@ -263,53 +263,88 @@ class MCPClient:
         
         return min(confidence, 1.0)
     
-    async def complete_activity(self, routine_id: int, activity_name: str) -> bool:
-        """Complete an activity in a routine."""
+    async def complete_activity(self, routine_id: int, activity_name: str) -> Dict[str, Any]:
+        """Complete an activity in a routine and return detailed result."""
         
         try:
             routine = await self.db.get_routine(routine_id)
             if not routine:
-                return False
+                return {'success': False, 'error': 'Routine not found'}
             
             # Find the activity to complete
             activity_to_complete = None
+            activity_index = -1
+            
+            # First, try to find by exact name match
             for i, activity in enumerate(routine.activities):
-                if activity.name.lower() == activity_name.lower():
+                if activity.name.lower().strip() == activity_name.lower().strip():
                     activity_to_complete = activity
+                    activity_index = i
                     break
             
+            # If not found, try fuzzy matching
             if not activity_to_complete:
-                # Try fuzzy matching
                 best_match = self._fuzzy_match_activity(activity_name, 
                     [a.name for a in routine.activities])
                 if best_match:
-                    activity_to_complete = next(
-                        a for a in routine.activities if a.name == best_match
-                    )
+                    for i, activity in enumerate(routine.activities):
+                        if activity.name == best_match:
+                            activity_to_complete = activity
+                            activity_index = i
+                            break
+            
+            # If still not found, try current activity
+            if not activity_to_complete and routine.current_activity_index < len(routine.activities):
+                current_activity = routine.activities[routine.current_activity_index]
+                if current_activity.status != ActivityStatus.COMPLETED:
+                    activity_to_complete = current_activity
+                    activity_index = routine.current_activity_index
             
             if not activity_to_complete:
-                logger.warning(f"Activity not found: {activity_name}")
-                return False
+                return {
+                    'success': False, 
+                    'error': f'Activity "{activity_name}" not found or already completed'
+                }
             
-            # Mark activity as completed
+            # Mark activity as completed in database
+            await self.db.update_activity_status(
+                activity_to_complete.id, 
+                'completed', 
+                datetime.now()
+            )
+            
+            # Update local status
             activity_to_complete.status = ActivityStatus.COMPLETED
             activity_to_complete.completed_at = datetime.now()
             
-            # Update routine progress
+            # Calculate new progress
             completed_count = sum(
                 1 for a in routine.activities 
-                if a.status == ActivityStatus.COMPLETED
+                if a.status == ActivityStatus.COMPLETED or a.id == activity_to_complete.id
             )
+            total_count = len(routine.activities)
+            progress_percentage = (completed_count / total_count * 100)
             
-            if completed_count >= len(routine.activities):
+            # Determine next activity and update routine
+            next_activity = None
+            next_activity_index = routine.current_activity_index
+            
+            if completed_count >= total_count:
+                # All activities completed
+                await self.db.update_routine_status(routine_id, 'completed')
                 routine.status = RoutineStatus.COMPLETED
                 routine.completed_at = datetime.now()
             else:
-                # Update current activity index
-                for i, activity in enumerate(routine.activities):
-                    if activity.status != ActivityStatus.COMPLETED:
-                        routine.current_activity_index = i
+                # Find next incomplete activity
+                for i in range(activity_index + 1, len(routine.activities)):
+                    if routine.activities[i].status != ActivityStatus.COMPLETED:
+                        next_activity = routine.activities[i]
+                        next_activity_index = i
                         break
+                
+                # Update routine's current activity index
+                await self.db.update_routine_status(routine_id, 'active', next_activity_index)
+                routine.current_activity_index = next_activity_index
             
             # Log activity completion
             from src.models.entities import ActivityLog
@@ -318,47 +353,118 @@ class MCPClient:
                 routine_id=routine.id,
                 activity_id=activity_to_complete.id,
                 activity_name=activity_to_complete.name,
-                completed_at=datetime.now()
+                completed_at=datetime.now(),
+                duration_minutes=5  # Default duration, could be calculated
             )
             await self.db.log_activity_completion(activity_log)
             
-            logger.info(f"Activity completed: {activity_name} in routine {routine_id}")
-            return True
+            result = {
+                'success': True,
+                'completed_activity': {
+                    'name': activity_to_complete.name,
+                    'index': activity_index
+                },
+                'next_activity': {
+                    'name': next_activity.name,
+                    'index': next_activity_index
+                } if next_activity else None,
+                'progress': {
+                    'completed_count': completed_count,
+                    'total_count': total_count,
+                    'percentage': round(progress_percentage, 1),
+                    'remaining_count': total_count - completed_count
+                },
+                'routine_completed': completed_count >= total_count,
+                'routine_status': routine.status.value
+            }
+            
+            logger.info(f"Activity completed: {activity_to_complete.name} ({completed_count}/{total_count})")
+            return result
             
         except Exception as e:
             logger.error(f"Error completing activity: {e}")
-            return False
+            return {'success': False, 'error': str(e)}
     
-    async def start_routine(self, child_id: int, routine_name: str) -> bool:
-        """Start a routine for a child."""
+    async def start_routine(self, child_id: int, routine_name: str) -> Dict[str, Any]:
+        """Start a routine for a child with proper state management."""
         
         try:
             routines = await self.db.get_child_routines(child_id)
             
-            # Find routine by name
+            # Find routine by name (fuzzy matching if needed)
             routine_to_start = None
             for routine in routines:
-                if routine.name.lower() == routine_name.lower():
+                if routine.name.lower().strip() == routine_name.lower().strip():
                     routine_to_start = routine
                     break
             
+            # Try fuzzy matching if exact match not found
             if not routine_to_start:
-                logger.warning(f"Routine not found: {routine_name}")
-                return False
+                best_match = self._fuzzy_match_routine_name(routine_name, [r.name for r in routines])
+                if best_match:
+                    routine_to_start = next(r for r in routines if r.name == best_match)
             
-            # Start the routine
+            if not routine_to_start:
+                return {
+                    'success': False,
+                    'error': f'Routine "{routine_name}" not found'
+                }
+            
+            # Stop any other active routines for this child
+            for routine in routines:
+                if routine.status == RoutineStatus.ACTIVE and routine.id != routine_to_start.id:
+                    await self.db.update_routine_status(routine.id, 'inactive')
+            
+            # Start the routine in database
+            await self.db.update_routine_status(routine_to_start.id, 'active', 0)
+            
+            # Reset all activities in database
+            for activity in routine_to_start.activities:
+                await self.db.update_activity_status(activity.id, 'not_started')
+                activity.status = ActivityStatus.NOT_STARTED
+                activity.completed_at = None
+            
+            # Update local routine object
             routine_to_start.status = RoutineStatus.ACTIVE
             routine_to_start.started_at = datetime.now()
             routine_to_start.current_activity_index = 0
             
-            # Reset all activities
-            for activity in routine_to_start.activities:
-                activity.status = ActivityStatus.NOT_STARTED
-                activity.completed_at = None
+            first_activity = routine_to_start.activities[0] if routine_to_start.activities else None
+            
+            result = {
+                'success': True,
+                'routine': {
+                    'id': routine_to_start.id,
+                    'name': routine_to_start.name,
+                    'status': 'active'
+                },
+                'first_activity': {
+                    'name': first_activity.name,
+                    'index': 0
+                } if first_activity else None,
+                'total_activities': len(routine_to_start.activities),
+                'started_at': routine_to_start.started_at.isoformat()
+            }
             
             logger.info(f"Routine started: {routine_name} for child {child_id}")
-            return True
+            return result
             
         except Exception as e:
             logger.error(f"Error starting routine: {e}")
-            return False
+            return {'success': False, 'error': str(e)}
+    
+    def _fuzzy_match_routine_name(self, routine_name: str, available_routines: List[str]) -> Optional[str]:
+        """Fuzzy match routine names."""
+        from difflib import SequenceMatcher
+        
+        best_match = None
+        best_score = 0.0
+        threshold = 0.6
+        
+        for available_routine in available_routines:
+            score = SequenceMatcher(None, routine_name.lower(), available_routine.lower()).ratio()
+            if score > best_score and score > threshold:
+                best_score = score
+                best_match = available_routine
+        
+        return best_match

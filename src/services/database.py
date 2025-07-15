@@ -1,30 +1,32 @@
 """
 Database service for Rainbow Bridge
-Handles all database operations and data persistence.
+Main database service that coordinates specialized database managers.
 """
 
-import sqlite3
-import aiosqlite
-import json
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import asdict
+from typing import Dict, List, Optional, Any
 import logging
 
 from src.models.entities import (
     Child, Routine, Activity, Interaction, Milestone, 
-    ActivityLog, VisualCard, CommunicationLevel, 
-    ActivityStatus, RoutineStatus
+    ActivityLog, VisualCard
 )
+from src.services.database_core import DatabaseCore
+from src.services.routine_manager import RoutineManager
+from src.services.progress_tracker import ProgressTracker
+from src.services.child_manager import ChildManager
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseService:
-    """Service for handling all database operations."""
+    """Main database service that coordinates specialized managers."""
     
     def __init__(self, db_path: str = "special_kids.db"):
         self.db_path = db_path
+        self.core = DatabaseCore(db_path)
+        self.routine_manager = RoutineManager(self.core)
+        self.progress_tracker = ProgressTracker(self.core)
+        self.child_manager = ChildManager(self.core)
     
     async def initialize(self):
         """Initialize the database with required tables."""
@@ -346,6 +348,101 @@ class DatabaseService:
             ))
             await db.commit()
             return cursor.lastrowid
+    
+    # Enhanced routine state management
+    async def update_routine_status(self, routine_id: int, status: str, current_activity_index: int = None) -> bool:
+        """Update routine status and current activity index."""
+        async with aiosqlite.connect(self.db_path) as db:
+            if current_activity_index is not None:
+                await db.execute("""
+                    UPDATE routines 
+                    SET status = ?, current_activity_index = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (status, current_activity_index, routine_id))
+            else:
+                await db.execute("""
+                    UPDATE routines 
+                    SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (status, routine_id))
+            await db.commit()
+            return True
+    
+    async def update_activity_status(self, activity_id: int, status: str, completed_at: datetime = None) -> bool:
+        """Update activity status and completion time."""
+        async with aiosqlite.connect(self.db_path) as db:
+            if completed_at:
+                await db.execute("""
+                    UPDATE activities 
+                    SET status = ?, completed_at = ?
+                    WHERE id = ?
+                """, (status, completed_at.isoformat(), activity_id))
+            else:
+                await db.execute("""
+                    UPDATE activities 
+                    SET status = ?
+                    WHERE id = ?
+                """, (status, activity_id))
+            await db.commit()
+            return True
+    
+    async def get_routine_progress(self, routine_id: int) -> Dict[str, Any]:
+        """Get detailed routine progress information."""
+        async with aiosqlite.connect(self.db_path) as db:
+            # Get routine info
+            cursor = await db.execute(
+                "SELECT * FROM routines WHERE id = ?", (routine_id,)
+            )
+            routine_row = await cursor.fetchone()
+            if not routine_row:
+                return {}
+            
+            # Get activities with their status
+            cursor = await db.execute("""
+                SELECT id, name, status, completed_at, sequence_order
+                FROM activities WHERE routine_id = ? 
+                ORDER BY sequence_order
+            """, (routine_id,))
+            activity_rows = await cursor.fetchall()
+            
+            total_activities = len(activity_rows)
+            completed_activities = sum(1 for row in activity_rows if row[2] == 'completed')
+            progress_percentage = (completed_activities / total_activities * 100) if total_activities > 0 else 0
+            
+            # Find current activity
+            current_activity = None
+            current_activity_index = routine_row[7]  # current_activity_index column
+            
+            if current_activity_index < len(activity_rows):
+                current_row = activity_rows[current_activity_index]
+                current_activity = {
+                    'id': current_row[0],
+                    'name': current_row[1],
+                    'status': current_row[2],
+                    'index': current_activity_index
+                }
+            
+            return {
+                'routine_id': routine_id,
+                'routine_name': routine_row[2],
+                'status': routine_row[6],
+                'total_activities': total_activities,
+                'completed_activities': completed_activities,
+                'progress_percentage': round(progress_percentage, 1),
+                'current_activity': current_activity,
+                'current_activity_index': current_activity_index,
+                'started_at': routine_row[8],
+                'activities': [
+                    {
+                        'id': row[0],
+                        'name': row[1],
+                        'status': row[2],
+                        'completed_at': row[3],
+                        'sequence_order': row[4]
+                    }
+                    for row in activity_rows
+                ]
+            }
     
     # Helper methods
     def _row_to_child(self, row) -> Child:

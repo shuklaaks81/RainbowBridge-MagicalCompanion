@@ -55,38 +55,41 @@ class AIAssistantService:
                 message, child_id, current_context
             )
             
-            # Generate AI response
-            ai_response = await self._generate_ai_response(
-                child, message, current_context, mcp_result
-            )
-            
-            # Handle routine actions if detected
-            routine_action = None
+            # Handle routine actions if detected (do this first to get updated context)
+            routine_action_result = None
             if mcp_result.get('intent') in ['complete_activity', 'start_routine']:
-                routine_action = await self._handle_routine_action(
+                routine_action_result = await self._handle_routine_action(
                     child_id, mcp_result, current_context
                 )
+            
+            # Get updated context after any routine actions
+            updated_context = await self._get_current_context(child_id)
+            
+            # Generate AI response with enhanced context
+            ai_response = await self._generate_ai_response(
+                child, message, updated_context, mcp_result, routine_action_result
+            )
             
             # Format the response
             formatted_response = self.formatter.format_response(
                 ai_response, 
                 child, 
-                current_context,
-                routine_action
+                updated_context,
+                routine_action_result
             )
             
             # Log the interaction
             await self._log_interaction(
                 child_id, message, formatted_response, 
-                communication_type, current_context, mcp_result
+                communication_type, updated_context, mcp_result
             )
             
             return ChatResponse(
                 message=formatted_response,
                 text=formatted_response,
-                routine_action=mcp_result.get('intent'),
-                current_activity_context=current_context,
-                suggestions=self._generate_suggestions(child, current_context)
+                routine_action=routine_action_result.get('action') if routine_action_result else None,
+                current_activity_context=updated_context,
+                suggestions=self._generate_suggestions(child, updated_context)
             )
             
         except Exception as e:
@@ -98,9 +101,9 @@ class AIAssistantService:
             )
     
     async def _get_current_context(self, child_id: int) -> Dict[str, Any]:
-        """Get the current context for a child including active routines."""
+        """Get the current context for a child including active routines with accurate progress."""
         
-        # Get active routine
+        # Get routine progress from database
         routines = await self.db.get_child_routines(child_id)
         active_routine = next(
             (r for r in routines if r.status.value == 'active'), None
@@ -114,29 +117,20 @@ class AIAssistantService:
         }
         
         if active_routine:
-            completed_count = sum(
-                1 for activity in active_routine.activities 
-                if activity.status.value == 'completed'
-            )
-            total_count = len(active_routine.activities)
-            progress = (completed_count / total_count * 100) if total_count > 0 else 0
+            # Get accurate progress from database
+            progress_data = await self.db.get_routine_progress(active_routine.id)
             
-            current_activity = None
-            if active_routine.current_activity_index < len(active_routine.activities):
-                current_activity = active_routine.activities[active_routine.current_activity_index]
+            current_activity = progress_data.get('current_activity')
             
             context.update({
                 'routine_id': active_routine.id,
                 'routine_name': active_routine.name,
-                'current_activity': {
-                    'name': current_activity.name,
-                    'description': current_activity.description,
-                    'index': active_routine.current_activity_index
-                } if current_activity else None,
-                'progress_percentage': round(progress, 1),
-                'completed_activities': completed_count,
-                'total_activities': total_count,
-                'remaining_activities': total_count - completed_count
+                'current_activity': current_activity,
+                'progress_percentage': progress_data.get('progress_percentage', 0),
+                'completed_activities': progress_data.get('completed_activities', 0),
+                'total_activities': progress_data.get('total_activities', 0),
+                'remaining_activities': progress_data.get('total_activities', 0) - progress_data.get('completed_activities', 0),
+                'activities_list': progress_data.get('activities', [])
             })
         
         return context
@@ -146,13 +140,14 @@ class AIAssistantService:
         child: Child, 
         message: str, 
         context: Dict[str, Any],
-        mcp_result: Dict[str, Any]
+        mcp_result: Dict[str, Any],
+        routine_action_result: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate an AI response using the configured AI service."""
+        """Generate an AI response using the configured AI service with enhanced context."""
         
-        # Build the prompt
+        # Build the prompt with routine action results
         system_prompt = self.prompts.get_system_prompt(child, context)
-        user_prompt = self.prompts.get_user_prompt(message, mcp_result, context)
+        user_prompt = self.prompts.get_user_prompt(message, mcp_result, context, routine_action_result)
         
         # Get AI response based on configuration
         if self.ai_config.use_local_llm:
@@ -216,8 +211,8 @@ class AIAssistantService:
         child_id: int, 
         mcp_result: Dict[str, Any],
         context: Dict[str, Any]
-    ) -> Optional[str]:
-        """Handle routine-related actions."""
+    ) -> Optional[Dict[str, Any]]:
+        """Handle routine-related actions with detailed results."""
         
         intent = mcp_result.get('intent')
         
@@ -226,18 +221,38 @@ class AIAssistantService:
             routine_id = context.get('routine_id')
             
             if routine_id and activity_name:
-                success = await self.mcp_client.complete_activity(
+                completion_result = await self.mcp_client.complete_activity(
                     routine_id, activity_name
                 )
-                return 'complete_activity' if success else None
+                
+                if completion_result.get('success'):
+                    return {
+                        'action': 'complete_activity',
+                        'result': completion_result
+                    }
+                else:
+                    return {
+                        'action': 'complete_activity_failed',
+                        'error': completion_result.get('error')
+                    }
         
         elif intent == 'start_routine':
             routine_name = mcp_result.get('extracted_routine')
             if routine_name:
-                success = await self.mcp_client.start_routine(
+                start_result = await self.mcp_client.start_routine(
                     child_id, routine_name
                 )
-                return 'start_routine' if success else None
+                
+                if start_result.get('success'):
+                    return {
+                        'action': 'start_routine',
+                        'result': start_result
+                    }
+                else:
+                    return {
+                        'action': 'start_routine_failed',
+                        'error': start_result.get('error')
+                    }
         
         return None
     

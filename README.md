@@ -36,6 +36,8 @@ A revolutionary, magical AI companion specially crafted for special needs childr
 
 ## 🚀 **Quick Start Your Magical Journey**
 
+### Option 1: New Modular Architecture (Recommended)
+
 1. **Clone the Magic** ✨
    ```bash
    git clone https://github.com/yourusername/RainbowBridge-MagicalCompanion.git
@@ -59,20 +61,25 @@ A revolutionary, magical AI companion specially crafted for special needs childr
    # Edit .env and add your OpenAI API key
    ```
 
-5. **Initialize the database**
+5. **Start the application (New Modular Entry Point)**
    ```bash
-   python -c "import asyncio; from database.db_manager import DatabaseManager; asyncio.run(DatabaseManager().initialize())"
+   python app.py
    ```
 
-6. **Start the application**
+6. **Try the demo** ✨
    ```bash
-   python main.py
+   python scripts/demo_fresh_setup.py
    ```
 
-7. **Try the demo** ✨
-   ```bash
-   python demo_fresh_setup.py
-   ```
+### Option 2: Legacy Entry Point (For Backward Compatibility)
+
+```bash
+# Initialize the database
+python -c "import asyncio; from database.db_manager import DatabaseManager; asyncio.run(DatabaseManager().initialize())"
+
+# Start with legacy entry point
+python main.py
+```
 
 The application will be available at `http://localhost:8000`
 
@@ -197,7 +204,35 @@ The AI assistant is configured with specific prompts optimized for autism spectr
 - **Milestones**: Tracks developmental milestones
 - **Progress**: Historical progress data
 
-## 🛠️ MCP Architecture & Extensibility
+## 🛠️ Project Architecture
+
+Rainbow Bridge now features a **modular, scalable architecture** designed for growth and maintainability:
+
+### 📁 Modular Structure
+```
+src/
+├── api/          # FastAPI routes and endpoints
+├── services/     # Business logic and data services
+├── models/       # Data models and schemas
+├── ai/           # AI assistant and language processing
+├── mcp/          # Model Context Protocol implementation
+└── utils/        # Utilities and helper functions
+
+config/           # Configuration management
+tests/            # Comprehensive test suite
+scripts/          # Demo and utility scripts
+```
+
+### 🏗️ Architecture Benefits
+- **Separation of Concerns**: Clear boundaries between components
+- **Scalability**: Easy to add new features and services
+- **Testability**: Individual components can be tested in isolation
+- **Maintainability**: Well-organized, easy-to-understand codebase
+- **Flexibility**: Configuration-driven, environment-aware
+
+For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## 🛠️ Legacy MCP Architecture & Extensibility
 
 Rainbow Bridge uses the **Model Context Protocol (MCP)** for seamless integration of AI tools and capabilities:
 
@@ -231,21 +266,24 @@ The MCP architecture makes it easy to add new features:
 ## Testing & Demo Scripts
 
 ### Available Demo Scripts
-- **`demo_fresh_setup.py`**: Complete demo showcasing current activity display and natural language completion
-- **`test_final_general.py`**: Tests general phrase recognition and completion detection
-- **`test_current_activity_display.py`**: Validates current activity context in all communications
-- **`debug_completion_trace.py`**: Debug script for tracing completion workflow
+- **`scripts/demo_fresh_setup.py`**: Complete demo showcasing current activity display and natural language completion
+- **`tests/integration/test_final_general.py`**: Tests general phrase recognition and completion detection
+- **`tests/integration/test_current_activity_display.py`**: Validates current activity context in all communications
+- **`tests/integration/debug_completion_trace.py`**: Debug script for tracing completion workflow
 
 ### Running Tests
 ```bash
+# Test the new modular structure
+python tests/test_modular_structure.py
+
 # Run the comprehensive demo
-python demo_fresh_setup.py
+python scripts/demo_fresh_setup.py
 
 # Test general phrase recognition
-python test_final_general.py
+python tests/integration/test_final_general.py
 
 # Test current activity display
-python test_current_activity_display.py
+python tests/integration/test_current_activity_display.py
 ```
 
 ## Contributing
@@ -295,6 +333,7 @@ For support, please contact [your-email@example.com] or create an issue in the r
 - **v1.1.0**: Enhanced visual communication tools
 - **v1.2.0**: Advanced progress tracking
 - **v1.3.0**: Current activity display and natural language completion detection
+- **v1.4.0**: Modular architecture and improved scalability
 - **v2.0.0**: Mobile app integration (planned)
 
 ## Technical Details

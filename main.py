@@ -6,6 +6,7 @@ It includes features for routine management, visual communication, and personali
 """
 
 import os
+import json
 import logging
 from typing import Optional
 from fastapi import FastAPI, Request, Form, File, UploadFile, HTTPException
@@ -668,6 +669,192 @@ async def view_progress_report(request: Request, child_id: int):
     except Exception as e:
         logger.error(f"Progress report error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to load progress report")
+
+@app.post("/api/child/{child_id}/start-routine")
+async def start_child_routine(child_id: int):
+    """Start a routine for a specific child - used by click buttons."""
+    try:
+        # Get available routine for this child
+        import aiosqlite
+        async with aiosqlite.connect("special_kids.db") as db:
+            cursor = await db.execute("""
+                SELECT id, name, activities 
+                FROM routines 
+                WHERE child_id = ? 
+                ORDER BY id 
+                LIMIT 1
+            """, (child_id,))
+            routine_data = await cursor.fetchone()
+            
+            if not routine_data:
+                return JSONResponse(
+                    content={"success": False, "error": "No routine found for this child"},
+                    status_code=404
+                )
+                
+        routine_id, routine_name, activities_json = routine_data
+        
+        # Start the routine using MCP client
+        from core.routine_mcp_client import RoutineMCPClient
+        mcp_client = RoutineMCPClient(routine_mcp_server)
+        
+        # Create intent data for the MCP client
+        intent_data = {
+            "child_id": child_id,
+            "routine_name": routine_name
+        }
+        
+        # Use MCP client to start routine
+        result = await mcp_client._handle_start_routine(intent_data)
+        
+        if not result.success:
+            return JSONResponse(
+                content={"success": False, "error": result.error or "Failed to start routine"},
+                status_code=400
+            )
+        
+        success = True
+        
+        if success:
+            return JSONResponse(content={
+                "success": True,
+                "message": f"Started {routine_name} successfully!",
+                "routine_id": routine_id,
+                "routine_name": routine_name
+            })
+        else:
+            return JSONResponse(
+                content={"success": False, "error": "Failed to start routine"},
+                status_code=400
+            )
+            
+    except Exception as e:
+        logger.error(f"Failed to start routine for child {child_id}: {str(e)}")
+        return JSONResponse(
+            content={"success": False, "error": f"Internal error: {str(e)}"},
+            status_code=500
+        )
+
+@app.get("/api/routine/{routine_id}/details")
+async def get_routine_details(routine_id: int, child_id: int = None):
+    """Get detailed information about a routine including all activities."""
+    try:
+        routine_data = await db_manager.get_routine(routine_id)
+        
+        if not routine_data:
+            return JSONResponse(
+                content={"error": "Routine not found"},
+                status_code=404
+            )
+        
+        # Parse activities from JSON string to get detailed structure
+        activities = []
+        try:
+            activities_data = json.loads(routine_data.get("activities", "[]"))
+            for i, activity in enumerate(activities_data):
+                activities.append({
+                    "position": i + 1,
+                    "name": activity.get("name", f"Activity {i+1}"),
+                    "description": activity.get("description", ""),
+                    "duration_minutes": activity.get("duration_minutes", 0),
+                    "instructions": activity.get("instructions", []),
+                    "visual_cue": activity.get("visual_cue", ""),
+                    "sensory_considerations": activity.get("sensory_considerations", [])
+                })
+        except (json.JSONDecodeError, TypeError):
+            # Handle case where activities might already be a list
+            activities_data = routine_data.get("activities", [])
+            
+            if isinstance(activities_data, list):
+                # Activities is already a list
+                for i, activity in enumerate(activities_data):
+                    if isinstance(activity, dict):
+                        activities.append({
+                            "position": i + 1,
+                            "name": activity.get("name", f"Activity {i+1}"),
+                            "description": activity.get("description", ""),
+                            "duration_minutes": activity.get("duration_minutes", 0),
+                            "instructions": activity.get("instructions", []),
+                            "visual_cue": activity.get("visual_cue", "task"),
+                            "sensory_considerations": activity.get("sensory_considerations", [])
+                        })
+                    else:
+                        # String activity in list
+                        activity_name = str(activity).strip()
+                        if activity_name:
+                            activities.append({
+                                "position": i + 1,
+                                "name": activity_name,
+                                "description": f"Complete the {activity_name.lower()} activity",
+                                "duration_minutes": 10,
+                                "instructions": [f"Follow the steps for {activity_name}"],
+                                "visual_cue": "task",
+                                "sensory_considerations": []
+                            })
+            else:
+                # Fallback for older format (comma-separated string)
+                activities_list = str(activities_data).split(',') if activities_data else []
+                for i, activity_name in enumerate(activities_list):
+                    if activity_name.strip():
+                        activities.append({
+                            "position": i + 1,
+                            "name": activity_name.strip(),
+                            "description": f"Complete the {activity_name.strip().lower()} activity",
+                            "duration_minutes": 10,
+                            "instructions": [f"Follow the steps for {activity_name.strip()}"],
+                            "visual_cue": "task",
+                            "sensory_considerations": []
+                        })
+        
+        # Get current progress if there's an active session
+        current_activity = None
+        progress = 0
+        active_session = None
+        
+        if child_id:
+            import aiosqlite
+            async with aiosqlite.connect("special_kids.db") as db:
+                cursor = await db.execute("""
+                    SELECT current_activity, progress, started_at
+                    FROM routine_sessions 
+                    WHERE routine_id = ? AND child_id = ? AND status = 'in_progress'
+                    ORDER BY started_at DESC 
+                    LIMIT 1
+                """, (routine_id, child_id))
+                session_data = await cursor.fetchone()
+                
+                if session_data:
+                    current_activity_idx, progress, started_at = session_data
+                    active_session = {
+                        "current_activity": current_activity_idx,
+                        "progress": progress,
+                        "started_at": started_at
+                    }
+                    if current_activity_idx < len(activities):
+                        current_activity = activities[current_activity_idx]["name"]
+        
+        routine_details = {
+            "id": routine_id,
+            "name": routine_data.get("name", "Unknown Routine"),
+            "description": routine_data.get("description", ""),
+            "total_activities": len(activities),
+            "estimated_duration": sum(activity.get("duration_minutes", 0) for activity in activities),
+            "activities": activities,
+            "current_activity": current_activity,
+            "progress": progress,
+            "active_session": active_session,
+            "child_id": routine_data.get("child_id"),
+            "created_at": routine_data.get("created_at")
+        }
+        
+        return JSONResponse(content=routine_details)
+        
+    except Exception as e:
+        logger.error(f"Failed to get routine details: {str(e)}")
+        return JSONResponse(
+            content={"error": f"Failed to get routine details: {str(e)}"},
+            status_code=500
+        )
 
 if __name__ == "__main__":
     import uvicorn

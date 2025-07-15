@@ -395,6 +395,9 @@ class RoutineManager:
                 routine_id, activity_index, True
             )
             
+            # Sync routine session progress
+            await self._sync_routine_session_progress(routine_id)
+            
             # Log the completion
             await self.db_manager.log_activity_completion(
                 child_id=routine.child_id,
@@ -667,3 +670,70 @@ class RoutineManager:
                 return True
         
         return False
+    
+    async def _sync_routine_session_progress(self, routine_id: int) -> None:
+        """Sync routine session progress with actual activity completion status."""
+        try:
+            import aiosqlite
+            import json
+            
+            async with aiosqlite.connect(self.db_manager.db_path) as db:
+                # Get routine and its activities
+                cursor = await db.execute("""
+                    SELECT r.activities, rs.id as session_id
+                    FROM routines r
+                    JOIN routine_sessions rs ON r.id = rs.routine_id
+                    WHERE r.id = ? AND rs.status = 'in_progress'
+                    ORDER BY rs.started_at DESC
+                    LIMIT 1
+                """, (routine_id,))
+                
+                result = await cursor.fetchone()
+                if not result:
+                    return
+                
+                activities_json, session_id = result
+                activities = json.loads(activities_json) if activities_json else []
+                
+                if not activities:
+                    return
+                
+                # Calculate progress
+                total_activities = len(activities)
+                completed_count = sum(1 for a in activities if a.get('completed', False))
+                progress = (completed_count / total_activities * 100) if total_activities > 0 else 0
+                
+                # Find current activity index (first incomplete activity)
+                current_activity_index = 0
+                for i, activity in enumerate(activities):
+                    if not activity.get('completed', False):
+                        current_activity_index = i
+                        break
+                
+                # Check if routine is completed
+                if completed_count == total_activities:
+                    # Mark session as completed
+                    await db.execute("""
+                        UPDATE routine_sessions 
+                        SET status = 'completed', 
+                            progress = 100.0, 
+                            current_activity = ?,
+                            completed_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (total_activities - 1, session_id))
+                    logger.info(f"✅ Routine session {session_id} marked as completed")
+                else:
+                    # Update session progress
+                    await db.execute("""
+                        UPDATE routine_sessions 
+                        SET current_activity = ?, 
+                            total_activities = ?,
+                            progress = ?
+                        WHERE id = ?
+                    """, (current_activity_index, total_activities, progress, session_id))
+                    logger.info(f"📊 Updated routine session {session_id}: {completed_count}/{total_activities} ({progress:.1f}%)")
+                
+                await db.commit()
+                
+        except Exception as e:
+            logger.error(f"Failed to sync routine session progress for routine {routine_id}: {e}")

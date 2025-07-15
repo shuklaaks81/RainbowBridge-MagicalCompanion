@@ -189,6 +189,14 @@ class RoutineMCPClient:
                 "help me organize", "create my schedule", "best activities for me",
                 "activities for today", "what's good for", "schedule suggestions",
                 "auto create", "smart routine", "ai suggestions", "best routine"
+            ],
+            "routine_info": [
+                "tell me about routine", "about routine", "routine details", "routine info",
+                "show routine", "explain routine", "what is routine", "describe routine",
+                "routine activities", "what's in routine", "activities in routine",
+                "routine summary", "view routine", "see routine", "routine breakdown",
+                "what activities are in my routine", "tell me about my routine",
+                "show me my routine", "what's in my routine", "my routine activities"
             ]
         }
         
@@ -196,18 +204,26 @@ class RoutineMCPClient:
         detected_intent = None  # Initialize variable
         
         if has_active_sessions:
-            # Look for activity completion patterns first
-            for pattern in intent_patterns["complete_activity"]:
+            # FIRST: Check for routine info patterns (high priority)
+            for pattern in intent_patterns["routine_info"]:
                 if pattern in message_lower:
-                    intent_data = {
-                        "intent": "complete_activity",
-                        "confidence": 0.9,
-                        "child_id": child_id,
-                        "message": message,
-                        "active_sessions": active_sessions
-                    }
-                    intent_data.update(self._extract_activity_name(message))
-                    return intent_data
+                    detected_intent = "routine_info"
+                    logger.info(f"DEBUG: Matched routine info pattern '{pattern}' even with active sessions")
+                    break
+            
+            # SECOND: Look for activity completion patterns
+            if not detected_intent:
+                for pattern in intent_patterns["complete_activity"]:
+                    if pattern in message_lower:
+                        intent_data = {
+                            "intent": "complete_activity",
+                            "confidence": 0.9,
+                            "child_id": child_id,
+                            "message": message,
+                            "active_sessions": active_sessions
+                        }
+                        intent_data.update(self._extract_activity_name(message))
+                        return intent_data
             
             # Check for explicit routine creation even with active sessions
             for pattern in intent_patterns["create_routine"]:
@@ -603,6 +619,8 @@ class RoutineMCPClient:
                 return await self._handle_get_suggestions(intent_data)
             elif intent == "smart_schedule":
                 return await self._handle_smart_schedule(intent_data)
+            elif intent == "routine_info":
+                return await self._handle_routine_info(intent_data)
             else:
                 return MCPToolResult(
                     success=False,
@@ -727,7 +745,20 @@ class RoutineMCPClient:
                         print(f"DEBUG: Using active routine ID {routine_id} for completion")
                     else:
                         print(f"WARNING: No active routine sessions found for child {child_id}")
-                        routine_id = None  # Don't default to routine 1
+                        # If no active sessions, find the first available routine for this child
+                        import aiosqlite
+                        async with aiosqlite.connect(db.db_path) as conn:
+                            cursor = await conn.execute(
+                                "SELECT id FROM routines WHERE child_id = ? AND active = 1 ORDER BY id LIMIT 1",
+                                (child_id,)
+                            )
+                            result = await cursor.fetchone()
+                            if result:
+                                routine_id = result[0]
+                                print(f"DEBUG: Found available routine ID {routine_id} for child {child_id}")
+                            else:
+                                print(f"ERROR: No routines found for child {child_id}")
+                                routine_id = None
                 except Exception as e:
                     print(f"ERROR: Failed to get active sessions: {e}")
                     routine_id = None
@@ -736,6 +767,13 @@ class RoutineMCPClient:
                 "child_id": child_id,
                 "routine_id": routine_id
             }
+            
+            if routine_id is None:
+                return MCPToolResult(
+                    success=False,
+                    content="🌈 I couldn't find any routines for you! Let's create your first routine together! ✨",
+                    error="No routines available"
+                )
             
             result = await self.mcp_server._start_routine(args)
             
@@ -928,6 +966,160 @@ class RoutineMCPClient:
         
         return formatted
     
+    async def _handle_routine_info(self, intent_data: Dict[str, Any]) -> MCPToolResult:
+        """Handle routine information requests - provide detailed activity summaries."""
+        try:
+            child_id = intent_data["child_id"]
+            message = intent_data["message"]
+            
+            # Extract routine identifier from message
+            routine_id = None
+            routine_name = None
+            
+            # Try to find routine ID or name in the message
+            import re
+            
+            # Look for routine ID pattern
+            id_match = re.search(r'routine\s+(\d+)', message.lower())
+            if id_match:
+                routine_id = int(id_match.group(1))
+            
+            # Look for routine name pattern
+            name_patterns = [
+                r'routine\s+"([^"]+)"',  # "routine name"
+                r'about\s+([a-zA-Z\s]+)\s+routine',  # about morning routine
+                r'tell\s+me\s+about\s+([a-zA-Z\s]+)',  # tell me about morning
+            ]
+            
+            for pattern in name_patterns:
+                name_match = re.search(pattern, message.lower())
+                if name_match:
+                    routine_name = name_match.group(1).strip()
+                    break
+            
+            # Get routine details using routine manager
+            if routine_id:
+                # Get by ID
+                routine = await self.mcp_server.db_manager.get_routine(routine_id)
+            elif routine_name:
+                # Get by name - find closest match
+                routines = await self.mcp_server.routine_manager.get_child_routines(child_id)
+                routine = None
+                for r in routines:
+                    if routine_name.lower() in r['name'].lower() or r['name'].lower() in routine_name.lower():
+                        routine = r
+                        break
+            else:
+                # Get most recent routine if no specific identifier
+                routines = await self.mcp_server.routine_manager.get_child_routines(child_id)
+                routine = routines[0] if routines else None
+            
+            if not routine:
+                return MCPToolResult(
+                    success=False,
+                    content="🌈 I couldn't find that routine. Would you like to see all your routines instead? 🌟",
+                    error="Routine not found"
+                )
+            
+            # Parse activities from the routine
+            import json
+            activities = []
+            
+            try:
+                if isinstance(routine['activities'], str):
+                    activities = json.loads(routine['activities'])
+                elif isinstance(routine['activities'], list):
+                    activities = routine['activities']
+            except (json.JSONDecodeError, KeyError):
+                activities = []
+            
+            # Get progress information
+            try:
+                import aiosqlite
+                async with aiosqlite.connect("special_kids.db") as conn:
+                    # Get completion stats
+                    cursor = await conn.execute("""
+                        SELECT COUNT(*) as total_sessions,
+                               SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_sessions
+                        FROM routine_sessions 
+                        WHERE routine_id = ? AND child_id = ?
+                    """, (routine['id'], child_id))
+                    
+                    stats = await cursor.fetchone()
+                    total_sessions = stats[0] if stats else 0
+                    completed_sessions = stats[1] if stats else 0
+                    
+                    # Get recent activity
+                    cursor = await conn.execute("""
+                        SELECT started_at, status 
+                        FROM routine_sessions 
+                        WHERE routine_id = ? AND child_id = ?
+                        ORDER BY started_at DESC LIMIT 1
+                    """, (routine['id'], child_id))
+                    
+                    recent_session = await cursor.fetchone()
+                    
+            except Exception as e:
+                logger.error(f"Error getting routine stats: {e}")
+                total_sessions = 0
+                completed_sessions = 0
+                recent_session = None
+            
+            # Format the response
+            response = f"🌈✨ **{routine['name']}** ✨🌈\n\n"
+            
+            # Add description if available
+            if routine.get('description'):
+                response += f"📝 {routine['description']}\n\n"
+            
+            # Add activities
+            if activities:
+                response += "🎯 **Activities:**\n"
+                for i, activity in enumerate(activities, 1):
+                    if isinstance(activity, dict):
+                        name = activity.get('name', f'Activity {i}')
+                        duration = activity.get('duration', 'No time set')
+                        description = activity.get('description', '')
+                        
+                        response += f"{i}. **{name}** ({duration})\n"
+                        if description:
+                            response += f"   💭 {description}\n"
+                    else:
+                        response += f"{i}. {activity}\n"
+                response += "\n"
+            
+            # Add progress information
+            if total_sessions > 0:
+                completion_rate = (completed_sessions / total_sessions) * 100
+                response += f"📊 **Progress:** {completed_sessions}/{total_sessions} sessions completed ({completion_rate:.1f}%)\n\n"
+            
+            # Add recent activity
+            if recent_session:
+                from datetime import datetime
+                try:
+                    session_date = datetime.fromisoformat(recent_session[0].replace('Z', '+00:00'))
+                    date_str = session_date.strftime('%B %d, %Y')
+                    status = recent_session[1]
+                    response += f"🕒 **Last session:** {date_str} ({status})\n\n"
+                except Exception:
+                    pass
+            
+            # Add encouraging message
+            response += "🌟 Keep up the amazing work! Every routine helps you grow stronger! 🌟"
+            
+            return MCPToolResult(
+                success=True,
+                content=response
+            )
+            
+        except Exception as e:
+            logger.error(f"Error handling routine info request: {str(e)}")
+            return MCPToolResult(
+                success=False,
+                content="🌈 I had trouble getting that routine information. Let me try again! ✨",
+                error=str(e)
+            )
+
     async def _get_active_sessions(self, child_id: int) -> List[Dict]:
         """Get active routine sessions for a child."""
         try:
